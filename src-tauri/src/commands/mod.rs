@@ -513,6 +513,18 @@ pub fn confirm_community_install_cmd(
 }
 
 #[tauri::command]
+pub fn community_missing_dependencies(
+    config: ResolvedMcpConfig,
+) -> Vec<crate::deps::MissingDependency> {
+    crate::deps::missing_dependencies(&config)
+}
+
+#[tauri::command]
+pub fn install_dependencies_cmd(names: Vec<String>) -> Result<String, String> {
+    crate::deps::install_dependencies(&names)
+}
+
+#[tauri::command]
 pub fn get_community_install_meta(
     state: State<AppState>,
     installation_id: String,

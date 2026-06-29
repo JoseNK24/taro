@@ -20,6 +20,7 @@ import type {
   InstallResult,
   InstallationRecord,
   IntegrationCatalogEntry,
+  MissingDependency,
   PluginCatalogEntry,
   PluginClientTargetRecord,
   PluginInstallResult,
@@ -265,6 +266,16 @@ export async function getCommunityInstallMeta(
   installationId: string,
 ): Promise<CommunityInstallMeta | null> {
   return invoke("get_community_install_meta", { installationId });
+}
+
+export async function communityMissingDependencies(
+  config: ResolvedMcpConfig,
+): Promise<MissingDependency[]> {
+  return invoke("community_missing_dependencies", { config });
+}
+
+export async function installDependencies(names: string[]): Promise<string> {
+  return invoke("install_dependencies_cmd", { names });
 }
 
 export async function getSetting(key: string): Promise<string | null> {

@@ -16,9 +16,11 @@ import { ErrorBanner } from "./Feedback";
 import { ClientName } from "@/components/ClientLogo";
 import {
   cancelCommunityInstall,
+  communityMissingDependencies,
   confirmCommunityInstall,
   detectClients,
   getCommunityInstallJob,
+  installDependencies,
   listHarnessInstances,
   onCommunityInstallProgress,
   probeHarnesses,
@@ -32,6 +34,7 @@ import type {
   DiscoveredMcpEntry,
   HarnessInstanceRecord,
   HarnessSnapshot,
+  MissingDependency,
   ResolvedMcpConfig,
 } from "../types";
 
@@ -70,6 +73,8 @@ export function CommunityInstallWizard({
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [installMessage, setInstallMessage] = useState("");
+  const [missingDeps, setMissingDeps] = useState<MissingDependency[]>([]);
+  const [installStatus, setInstallStatus] = useState("Installing and syncing to clients…");
 
   const loadHarnesses = useCallback(async () => {
     const [inst, probes, detected] = await Promise.all([
@@ -178,11 +183,29 @@ export function CommunityInstallWizard({
     }
   };
 
+  const goToClients = async () => {
+    setStep("clients");
+    setMissingDeps([]);
+    if (resolved) {
+      try {
+        setMissingDeps(await communityMissingDependencies(resolved));
+      } catch {
+        // Non-fatal: the install confirm step still reports missing deps.
+      }
+    }
+  };
+
   const handleConfirmInstall = async () => {
     if (!job || !resolved) return;
     setStep("installing");
     setError(null);
     try {
+      const toInstall = missingDeps.filter((d) => d.installable).map((d) => d.name);
+      if (toInstall.length > 0) {
+        setInstallStatus(`Installing dependencies: ${toInstall.join(", ")}…`);
+        await installDependencies(toInstall);
+      }
+      setInstallStatus("Installing and syncing to clients…");
       const integrationId = `community-${entry.id}`;
       for (const [key, value] of Object.entries(secretValues)) {
         if (value.trim()) {
@@ -332,6 +355,22 @@ export function CommunityInstallWizard({
 
         {step === "clients" && resolved && (
           <div className="space-y-3">
+            {missingDeps.length > 0 && (
+              <div className="rounded-lg border border-border bg-muted/50 p-3 text-xs">
+                <p className="mb-1 font-medium">
+                  Taro will install these prerequisites for you:
+                </p>
+                <ul className="space-y-0.5">
+                  {missingDeps.map((d) => (
+                    <li key={d.name} className="text-muted-foreground">
+                      {d.installable ? "• " : "⚠ "}
+                      {d.install_label}
+                      {!d.installable && " (install manually)"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {resolved.env_keys.map((key) => (
               <div key={key} className="space-y-2">
                 <Label htmlFor={key}>{key}</Label>
@@ -379,7 +418,7 @@ export function CommunityInstallWizard({
 
         {step === "installing" && (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Installing and syncing to clients…
+            {installStatus}
           </p>
         )}
 
@@ -420,7 +459,7 @@ export function CommunityInstallWizard({
                 </Button>
               )}
               {step === "review" && (
-                <Button type="button" onClick={() => setStep("clients")}>
+                <Button type="button" onClick={goToClients}>
                   Continue
                 </Button>
               )}
@@ -430,7 +469,9 @@ export function CommunityInstallWizard({
                   disabled={selectedClients.size === 0}
                   onClick={handleConfirmInstall}
                 >
-                  Confirm install
+                  {missingDeps.some((d) => d.installable)
+                    ? "Install prerequisites & confirm"
+                    : "Confirm install"}
                 </Button>
               )}
             </>

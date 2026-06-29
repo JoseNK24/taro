@@ -61,6 +61,12 @@ export type DependencyStatus = {
   path?: string | null;
 };
 
+export type MissingDependency = {
+  name: string;
+  install_label: string;
+  installable: boolean;
+};
+
 export type FirstRunStatus = {
   completed: boolean;
   detected_clients: DetectionResult[];

@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use crate::db::Database;
+use crate::debug_log::agent_debug_log;
 use crate::detect::{check_dependencies, sync_to_clients};
 use crate::harness::{get_driver, parse_instance_config};
 use crate::health::probe_server;
@@ -16,7 +17,8 @@ use crate::models::{
 use crate::secrets;
 
 const ALLOWED_COMMANDS: &[&str] = &["npx", "uvx", "node", "python3", "python"];
-const AGENT_TIMEOUT_SECS: u64 = 120;
+// Generous: the agent may install runtimes (brew/uv) before reporting.
+const AGENT_TIMEOUT_SECS: u64 = 300;
 
 #[derive(Debug, Clone)]
 struct JobState {
@@ -145,6 +147,20 @@ async fn run_agent_job(
     emit_progress(&app, &job_id, "Starting agent analysis…");
 
     let readme = fetch_readme_excerpt(&entry).await;
+    // #region agent log
+    agent_debug_log(
+        "E",
+        "community_install/mod.rs:readme",
+        "readme fetched",
+        serde_json::json!({
+            "mcp_id": entry.id,
+            "mcp_name": entry.name,
+            "install_hint": entry.install_hint,
+            "readme_len": readme.as_ref().map(|r| r.len()),
+            "driver_kind": driver_kind,
+        }),
+    );
+    // #endregion
     let deps = check_dependencies(&[]);
     let dep_names: Vec<String> = deps
         .iter()
@@ -154,7 +170,7 @@ async fn run_agent_job(
 
     let ctx = crate::harness::driver::CommunityInstallContext {
         entry: entry.clone(),
-        readme_excerpt: readme,
+        readme_excerpt: readme.clone(),
         dependencies: dep_names,
     };
 
@@ -183,6 +199,19 @@ async fn run_agent_job(
 
     match result {
         Ok(Ok((Ok(resolved), log))) => {
+            // #region agent log
+            agent_debug_log(
+                "D",
+                "community_install/mod.rs:agent_ok",
+                "agent returned config",
+                serde_json::json!({
+                    "command": resolved.command,
+                    "args": resolved.args,
+                    "confidence": resolved.confidence,
+                    "log_len": log.len(),
+                }),
+            );
+            // #endregion
             append_log(&jobs, &job_id, &log);
             emit_progress(&app, &job_id, &log);
             match validate_resolved_config(&resolved) {
@@ -195,19 +224,54 @@ async fn run_agent_job(
                     emit_progress(&app, &job_id, &log);
                 }
                 Err(e) => {
+                    // #region agent log
+                    agent_debug_log(
+                        "D",
+                        "community_install/mod.rs:validation_failed",
+                        "validate_resolved_config rejected agent output",
+                        serde_json::json!({ "error": e }),
+                    );
+                    // #endregion
                     append_log(&jobs, &job_id, &format!("Validation failed: {e}\n"));
-                    try_fallback(&jobs, &job_id, &entry, &app);
+                    try_fallback(&jobs, &job_id, &entry, readme.as_deref(), &app);
                 }
             }
         }
         Ok(Ok((Err(e), log))) => {
+            // #region agent log
+            agent_debug_log(
+                "B",
+                "community_install/mod.rs:agent_err",
+                "agent returned error",
+                serde_json::json!({
+                    "error": e.to_string(),
+                    "log_tail": log.chars().rev().take(500).collect::<String>().chars().rev().collect::<String>(),
+                }),
+            );
+            // #endregion
             append_log(&jobs, &job_id, &format!("{log}\nAgent error: {e}\n"));
-            try_fallback(&jobs, &job_id, &entry, &app);
+            try_fallback(&jobs, &job_id, &entry, readme.as_deref(), &app);
         }
         Ok(Err(e)) => {
+            // #region agent log
+            agent_debug_log(
+                "A",
+                "community_install/mod.rs:thread_err",
+                "spawn_blocking failed",
+                serde_json::json!({ "error": e.to_string() }),
+            );
+            // #endregion
             fail_job(&jobs, &job_id, &format!("Agent thread failed: {e}"));
         }
         Err(_) => {
+            // #region agent log
+            agent_debug_log(
+                "A",
+                "community_install/mod.rs:timeout",
+                "agent timed out",
+                serde_json::json!({ "timeout_secs": AGENT_TIMEOUT_SECS }),
+            );
+            // #endregion
             fail_job(&jobs, &job_id, "Agent timed out after 120s");
         }
     }
@@ -217,23 +281,51 @@ fn try_fallback(
     jobs: &Arc<Mutex<HashMap<String, JobState>>>,
     job_id: &str,
     entry: &DiscoveredMcpEntry,
+    readme_excerpt: Option<&str>,
     app: &AppHandle,
 ) {
     let ctx = crate::harness::driver::CommunityInstallContext {
         entry: entry.clone(),
-        readme_excerpt: None,
+        readme_excerpt: readme_excerpt.map(str::to_string),
         dependencies: vec![],
     };
-    if let Some(config) = crate::harness::util::heuristic_from_hint(&ctx) {
-        if let Ok(validated) = validate_resolved_config(&config) {
-            update_job(jobs, job_id, |job| {
-                job.status = "awaiting_review".to_string();
-                job.resolved_config = Some(validated);
-                job.agent_log
-                    .push_str("Using install_hint fallback (review carefully).\n");
-            });
-            emit_progress(app, job_id, "Using install_hint fallback");
-            return;
+    let hint_heuristic = crate::harness::util::heuristic_from_hint(&ctx);
+    let readme_heuristic = crate::harness::util::heuristic_from_readme(&ctx);
+    // #region agent log
+    agent_debug_log(
+        "C",
+        "community_install/mod.rs:try_fallback",
+        "fallback heuristics attempt",
+        serde_json::json!({
+            "install_hint": entry.install_hint,
+            "hint_heuristic_found": hint_heuristic.is_some(),
+            "readme_heuristic_found": readme_heuristic.is_some(),
+            "readme_len": readme_excerpt.map(|r| r.len()),
+        }),
+    );
+    // #endregion
+    if let Some(config) = readme_heuristic.or(hint_heuristic) {
+        match validate_resolved_config(&config) {
+            Ok(validated) => {
+                update_job(jobs, job_id, |job| {
+                    job.status = "awaiting_review".to_string();
+                    job.resolved_config = Some(validated);
+                    job.agent_log
+                        .push_str("Using README/install_hint fallback (review carefully).\n");
+                });
+                emit_progress(app, job_id, "Using README/install_hint fallback");
+                return;
+            }
+            Err(e) => {
+                // #region agent log
+                agent_debug_log(
+                    "D",
+                    "community_install/mod.rs:fallback_validation_failed",
+                    "fallback config rejected",
+                    serde_json::json!({ "error": e }),
+                );
+                // #endregion
+            }
         }
     }
     fail_job(
@@ -241,6 +333,14 @@ fn try_fallback(
         job_id,
         "Agent failed. Check install_hint or install manually.",
     );
+}
+
+fn is_safe_binary_command(base_cmd: &str) -> bool {
+    !base_cmd.is_empty()
+        && !base_cmd.starts_with('-')
+        && base_cmd
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 pub fn validate_resolved_config(config: &ResolvedMcpConfig) -> Result<ResolvedMcpConfig, String> {
@@ -254,10 +354,14 @@ pub fn validate_resolved_config(config: &ResolvedMcpConfig) -> Result<ResolvedMc
         .and_then(|n| n.to_str())
         .unwrap_or(cmd);
 
-    if !ALLOWED_COMMANDS.contains(&base_cmd) {
+    if !ALLOWED_COMMANDS.contains(&base_cmd) && !is_safe_binary_command(base_cmd) {
         return Err(format!(
-            "Command '{cmd}' not in allowlist (npx, uvx, node, python3)"
+            "Command '{cmd}' not in allowlist (npx, uvx, node, python3, or safe binary name)"
         ));
+    }
+
+    if cmd.contains("/path/to/") {
+        return Err("Placeholder paths are not allowed".to_string());
     }
 
     if cmd.starts_with('/') && !cmd.starts_with("/usr/") && !cmd.starts_with("/opt/") {
@@ -270,7 +374,14 @@ pub fn validate_resolved_config(config: &ResolvedMcpConfig) -> Result<ResolvedMc
         }
     }
 
-    Ok(config.clone())
+    // The agent sometimes fills `requires` with prose ("Install the native
+    // binary…") instead of command names; those can never resolve on PATH and
+    // would block the install with a nonsense "Missing dependencies" error.
+    // Keep only plausible command tokens.
+    let mut validated = config.clone();
+    validated.requires.retain(|r| is_safe_binary_command(r.trim()));
+
+    Ok(validated)
 }
 
 pub fn resolved_to_mcp_server(
@@ -339,16 +450,26 @@ pub fn confirm_community_install(
     let mut server = resolved_to_mcp_server(&job.discovered_mcp_id, &validated, &secrets_map);
     server.env.clear();
 
-    let deps = check_dependencies(&validated.requires);
-    let missing_deps: Vec<_> = deps.iter().filter(|d| !d.available).collect();
-    if !missing_deps.is_empty() {
+    // Hands-off backstop: if the agent didn't already install a required runtime,
+    // install it here (deterministic recipes) instead of blocking the user.
+    let missing = crate::deps::missing_dependencies(&validated);
+    let installable: Vec<String> = missing
+        .iter()
+        .filter(|d| d.installable)
+        .map(|d| d.name.clone())
+        .collect();
+    if !installable.is_empty() {
+        crate::deps::install_dependencies(&installable)?;
+    }
+    let unresolvable: Vec<String> = crate::deps::missing_dependencies(&validated)
+        .into_iter()
+        .filter(|d| !d.installable)
+        .map(|d| d.install_label)
+        .collect();
+    if !unresolvable.is_empty() {
         return Err(format!(
-            "Missing dependencies: {}",
-            missing_deps
-                .iter()
-                .map(|d| d.name.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+            "Missing dependencies (install manually): {}",
+            unresolvable.join(", ")
         ));
     }
 

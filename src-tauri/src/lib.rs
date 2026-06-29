@@ -2,7 +2,9 @@ mod adapters;
 mod catalog;
 mod commands;
 mod community_install;
+mod debug_log;
 mod db;
+mod deps;
 mod detect;
 mod discovery;
 mod harness;
@@ -101,6 +103,8 @@ pub fn run() {
             commands::get_community_install_job,
             commands::cancel_community_install,
             commands::confirm_community_install_cmd,
+            commands::community_missing_dependencies,
+            commands::install_dependencies_cmd,
             commands::get_community_install_meta,
             commands::get_setting,
             commands::set_setting,
