@@ -1,0 +1,116 @@
+[
+  {
+    "id": "filesystem",
+    "name": "Sistema de archivos",
+    "description": "Accede a archivos y carpetas locales de forma segura desde tu asistente.",
+    "tags": ["archivos", "local"],
+    "icon": "folder",
+    "coming_soon": false,
+    "server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "requires": ["node"]
+    },
+    "secrets": []
+  },
+  {
+    "id": "brave-search",
+    "name": "Brave Search",
+    "description": "Busca en la web desde tu asistente con resultados en tiempo real.",
+    "tags": ["búsqueda", "web"],
+    "icon": "brave",
+    "coming_soon": false,
+    "server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "requires": ["node"]
+    },
+    "secrets": [
+      {
+        "key": "BRAVE_API_KEY",
+        "label": "Brave API Key",
+        "required": true
+      }
+    ]
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "description": "Gestiona repositorios, issues y pull requests desde tu asistente.",
+    "tags": ["código", "git"],
+    "icon": "github",
+    "coming_soon": false,
+    "server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "requires": ["node"]
+    },
+    "secrets": [
+      {
+        "key": "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "label": "Token de acceso personal",
+        "required": true
+      }
+    ]
+  },
+  {
+    "id": "notion",
+    "name": "Notion",
+    "description": "Conecta tus páginas y bases de datos de Notion.",
+    "tags": ["productividad"],
+    "icon": "notion",
+    "coming_soon": true,
+    "server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-notion"],
+      "requires": ["node"]
+    },
+    "secrets": [
+      {
+        "key": "NOTION_API_KEY",
+        "label": "Notion API Key",
+        "required": true
+      }
+    ]
+  },
+  {
+    "id": "slack",
+    "name": "Slack",
+    "description": "Envía mensajes y consulta canales de Slack.",
+    "tags": ["comunicación"],
+    "icon": "slack",
+    "coming_soon": true,
+    "server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "requires": ["node"]
+    },
+    "secrets": [
+      {
+        "key": "SLACK_BOT_TOKEN",
+        "label": "Slack Bot Token",
+        "required": true
+      }
+    ]
+  },
+  {
+    "id": "postgres",
+    "name": "PostgreSQL",
+    "description": "Consulta bases de datos PostgreSQL de forma segura.",
+    "tags": ["datos", "base de datos"],
+    "icon": "database",
+    "coming_soon": true,
+    "server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "requires": ["node"]
+    },
+    "secrets": [
+      {
+        "key": "POSTGRES_CONNECTION_STRING",
+        "label": "Cadena de conexión",
+        "required": true
+      }
+    ]
+  }
+]
