@@ -76,9 +76,24 @@ impl ClientAdapter for JsonMcpAdapter {
 }
 
 pub fn command_exists(cmd: &str) -> bool {
-    std::process::Command::new("which")
+    if std::process::Command::new("which")
         .arg(cmd)
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+    {
+        return true;
+    }
+
+    let Some(home) = dirs::home_dir() else {
+        return false;
+    };
+
+    [
+        home.join(".opencode/bin").join(cmd),
+        home.join("bin").join(cmd),
+        home.join(".local/bin").join(cmd),
+    ]
+    .iter()
+    .any(|path| path.is_file())
 }

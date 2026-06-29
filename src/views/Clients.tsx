@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ErrorBanner, LoadingState } from "../components/Feedback";
 import { PageHeader } from "../components/Sidebar";
 import { detectClients, getDependencies } from "../hooks/useTauri";
 import type { DependencyStatus, DetectionResult } from "../types";
+
+function syncLabel(client: DetectionResult): string {
+  if (!client.detected) return "—";
+  if (client.sync_supported) return "Supported";
+  return "Coming soon";
+}
+
+function configLabel(client: DetectionResult): string {
+  if (!client.config_path) return "—";
+  return client.config_exists ? "Found" : "No configuration";
+}
 
 export function Clients() {
   const [clients, setClients] = useState<DetectionResult[]>([]);
@@ -34,104 +47,103 @@ export function Clients() {
   if (loading) return <LoadingState />;
 
   const detectedCount = clients.filter((c) => c.detected).length;
+  const sortedClients = [...clients].sort((a, b) => {
+    if (a.detected !== b.detected) return a.detected ? -1 : 1;
+    return a.display_name.localeCompare(b.display_name, "en");
+  });
 
   return (
     <div>
       <PageHeader
-        title="Clientes"
-        description="Aplicaciones de IA detectadas en tu Mac y herramientas del sistema."
+        title="Clients"
+        description="AI applications detected on your Mac and system tools."
         action={
-          <button
-            type="button"
-            onClick={load}
-            className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm hover:bg-white"
-          >
-            Volver a detectar
-          </button>
+          <Button type="button" variant="outline" size="sm" onClick={load}>
+            Re-detect
+          </Button>
         }
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       <section className="mb-8">
-        <h3 className="mb-3 text-sm font-medium text-neutral-700">
-          Clientes de IA ({detectedCount} detectados de {clients.length})
+        <h3 className="mb-3 text-sm font-medium text-foreground">
+          AI clients ({detectedCount} detected of {clients.length})
         </h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {clients.map((client) => (
-            <div
-              key={client.client_id}
-              className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h4 className="font-medium text-neutral-900">
+        <Card className="overflow-hidden py-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Client</th>
+                <th className="px-4 py-3 font-medium">Detection</th>
+                <th className="px-4 py-3 font-medium">Sync</th>
+                <th className="px-4 py-3 font-medium">Configuration</th>
+                <th className="px-4 py-3 font-medium">Path</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedClients.map((client) => (
+                <tr
+                  key={client.client_id}
+                  className="border-b border-border/50 last:border-0"
+                >
+                  <td className="px-4 py-3 font-medium text-foreground">
                     {client.display_name}
-                  </h4>
-                  <p className="text-xs text-neutral-500">
-                    {client.detected ? "Detectado" : "No detectado"}
-                    {!client.sync_supported && client.detected
-                      ? " · Sincronización próximamente"
-                      : ""}
-                  </p>
-                </div>
-                <span
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                    client.detected ? "bg-emerald-500" : "bg-neutral-300"
-                  }`}
-                />
-              </div>
-              {client.config_path && (
-                <p className="mt-2 truncate text-xs text-neutral-400">
-                  {client.config_exists
-                    ? "Configuración encontrada"
-                    : "Sin configuración"}{" "}
-                  — {client.config_path}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {client.detected ? "Detected" : "Not detected"}
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {syncLabel(client)}
+                  </td>
+                  <td className="px-4 py-3 text-foreground">
+                    {configLabel(client)}
+                  </td>
+                  <td
+                    className="max-w-xs truncate px-4 py-3 text-xs text-muted-foreground"
+                    title={client.config_path ?? undefined}
+                  >
+                    {client.config_path ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
       </section>
 
       <section>
-        <h3 className="mb-3 text-sm font-medium text-neutral-700">
-          Dependencias del sistema
+        <h3 className="mb-3 text-sm font-medium text-foreground">
+          System dependencies
         </h3>
-        <div className="rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <Card className="overflow-hidden py-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-100 text-left text-neutral-500">
-                <th className="px-4 py-3 font-medium">Herramienta</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">Ruta</th>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Tool</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Path</th>
               </tr>
             </thead>
             <tbody>
               {deps.map((dep) => (
                 <tr
                   key={dep.name}
-                  className="border-b border-neutral-50 last:border-0"
+                  className="border-b border-border/50 last:border-0"
                 >
-                  <td className="px-4 py-3 font-medium text-neutral-800">
+                  <td className="px-4 py-3 font-medium text-foreground">
                     {dep.name}
                   </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        dep.available ? "text-emerald-600" : "text-amber-600"
-                      }
-                    >
-                      {dep.available ? "Disponible" : "No encontrado"}
-                    </span>
+                  <td className="px-4 py-3 text-foreground">
+                    {dep.available ? "Available" : "Not found"}
                   </td>
-                  <td className="px-4 py-3 text-xs text-neutral-400">
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
                     {dep.path ?? "—"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       </section>
     </div>
   );

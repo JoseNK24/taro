@@ -1,20 +1,31 @@
 mod adapters;
 mod catalog;
 mod commands;
+mod community_install;
 mod db;
 mod detect;
+mod discovery;
+mod harness;
 mod health;
 mod install;
 mod models;
+mod plugin_adapters;
+mod plugin_catalog;
+mod plugin_install;
 mod secrets;
 mod state;
 
 use std::sync::Mutex;
 
+use std::sync::Arc;
+
 use tauri::Manager;
 
 use catalog::Catalog;
+use community_install::CommunityInstallManager;
 use db::Database;
+use discovery::{import_if_empty, maybe_background_sync};
+use plugin_catalog::PluginCatalog;
 use state::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,10 +44,20 @@ pub fn run() {
                 .or_else(|_| Catalog::from_embedded())
                 .expect("failed to load catalog");
 
+            let plugin_catalog = PluginCatalog::load(app.handle())
+                .or_else(|_| PluginCatalog::from_embedded())
+                .expect("failed to load plugin catalog");
+
+            import_if_empty(&db, app.handle()).expect("failed to import discovered catalog");
+
             app.manage(AppState {
-                db: Mutex::new(db),
+                db: Arc::new(Mutex::new(db)),
                 catalog,
+                plugin_catalog,
+                community_install: CommunityInstallManager::default(),
             });
+
+            maybe_background_sync(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -59,6 +80,30 @@ pub fn run() {
             commands::run_all_health_checks,
             commands::get_health_status,
             commands::get_client_targets,
+            commands::search_discovered_mcps,
+            commands::get_discovered_mcp,
+            commands::sync_discovered_catalog,
+            commands::get_discovery_status,
+            commands::get_plugin_catalog,
+            commands::get_plugin_installations,
+            commands::install_plugin,
+            commands::uninstall_plugin,
+            commands::toggle_plugin_installation,
+            commands::get_plugin_client_targets,
+            commands::list_harness_instances,
+            commands::list_harness_drivers,
+            commands::create_harness_instance,
+            commands::update_harness_instance,
+            commands::delete_harness_instance,
+            commands::probe_harnesses,
+            commands::set_default_install_agent,
+            commands::start_community_install,
+            commands::get_community_install_job,
+            commands::cancel_community_install,
+            commands::confirm_community_install_cmd,
+            commands::get_community_install_meta,
+            commands::get_setting,
+            commands::set_setting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

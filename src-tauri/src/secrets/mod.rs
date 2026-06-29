@@ -71,3 +71,16 @@ pub fn missing_required_secrets(
         .map(|d| d.key.clone())
         .collect()
 }
+
+pub fn resolve_env_keys(
+    integration_id: &str,
+    keys: &[String],
+) -> std::collections::HashMap<String, String> {
+    let mut env = std::collections::HashMap::new();
+    for key in keys {
+        if let Ok(value) = get_secret(integration_id, key) {
+            env.insert(key.clone(), value);
+        }
+    }
+    env
+}

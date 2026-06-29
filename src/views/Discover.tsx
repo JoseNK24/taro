@@ -1,33 +1,75 @@
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { DiscoveredMcpCard } from "../components/DiscoveredMcpCard";
+import { DiscoverySearchBar } from "../components/DiscoverySearchBar";
 import { ErrorBanner, LoadingState } from "../components/Feedback";
 import { PageHeader } from "../components/Sidebar";
 import {
   detectClients,
   getCatalog,
+  getDiscoveryStatus,
   getInstallations,
   getSecretsStatus,
   installIntegration,
   saveSecret,
+  searchDiscoveredMcps,
+  syncDiscoveredCatalog,
 } from "../hooks/useTauri";
 import type {
   DetectionResult,
+  DiscoveredMcpEntry,
+  DiscoverySort,
   IntegrationCatalogEntry,
   SecretStatus,
 } from "../types";
 
 interface DiscoverProps {
   onInstalled: () => void;
+  onOpenSettings?: () => void;
 }
 
 type WizardStep = "clients" | "secrets" | "installing" | "done";
+type DiscoverTab = "curated" | "community";
 
-export function Discover({ onInstalled }: DiscoverProps) {
+const PAGE_SIZE = 24;
+
+export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
+  const [tab, setTab] = useState<DiscoverTab>("curated");
   const [catalog, setCatalog] = useState<IntegrationCatalogEntry[]>([]);
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [clients, setClients] = useState<DetectionResult[]>([]);
   const [secrets, setSecrets] = useState<SecretStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [communityQuery, setCommunityQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [communitySort, setCommunitySort] = useState<DiscoverySort>("popular");
+  const [communityResults, setCommunityResults] = useState<DiscoveredMcpEntry[]>([]);
+  const [communityTotal, setCommunityTotal] = useState(0);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const [selected, setSelected] = useState<IntegrationCatalogEntry | null>(null);
   const [wizardStep, setWizardStep] = useState<WizardStep>("clients");
@@ -39,11 +81,12 @@ export function Discover({ onInstalled }: DiscoverProps) {
     setLoading(true);
     setError(null);
     try {
-      const [cat, installs, detected, secretStatus] = await Promise.all([
+      const [cat, installs, detected, secretStatus, status] = await Promise.all([
         getCatalog(),
         getInstallations(),
         detectClients(),
         getSecretsStatus(),
+        getDiscoveryStatus(),
       ]);
       setCatalog(cat);
       setInstalledIds(new Set(installs.map((i) => i.integration_id)));
@@ -58,6 +101,7 @@ export function Discover({ onInstalled }: DiscoverProps) {
         ),
       );
       setSecrets(secretStatus);
+      setLastSyncedAt(status.last_synced_at ?? null);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -68,6 +112,49 @@ export function Discover({ onInstalled }: DiscoverProps) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(communityQuery), 300);
+    return () => clearTimeout(timer);
+  }, [communityQuery]);
+
+  const loadCommunity = useCallback(async () => {
+    if (tab !== "community") return;
+    setCommunityLoading(true);
+    try {
+      const result = await searchDiscoveredMcps(
+        debouncedQuery,
+        communitySort,
+        PAGE_SIZE,
+        0,
+      );
+      setCommunityResults(result.entries);
+      setCommunityTotal(result.total);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setCommunityLoading(false);
+    }
+  }, [tab, debouncedQuery, communitySort]);
+
+  useEffect(() => {
+    loadCommunity();
+  }, [loadCommunity]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      await syncDiscoveredCatalog();
+      const status = await getDiscoveryStatus();
+      setLastSyncedAt(status.last_synced_at ?? null);
+      await loadCommunity();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const openWizard = (entry: IntegrationCatalogEntry) => {
     if (entry.coming_soon) return;
@@ -113,124 +200,215 @@ export function Discover({ onInstalled }: DiscoverProps) {
     }
   };
 
+  const formatSyncTime = (iso: string | null) => {
+    if (!iso) return "Never";
+    try {
+      return new Date(iso).toLocaleString("en-US");
+    } catch {
+      return iso;
+    }
+  };
+
   if (loading) return <LoadingState />;
 
   return (
     <div>
       <PageHeader
-        title="Descubrir"
-        description="Explora e instala integraciones para tus asistentes de IA."
+        title="Discover"
+        description="Browse and install integrations for your AI assistants."
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {catalog.map((entry) => {
-          const isInstalled = installedIds.has(entry.id);
-          return (
-            <article
-              key={entry.id}
-              className="flex flex-col rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"
-            >
-              <div>
-                <h3 className="font-medium text-neutral-900">{entry.name}</h3>
-                <p className="mt-1 text-sm text-neutral-500 line-clamp-2">
-                  {entry.description}
-                </p>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1">
-                {entry.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-md bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-4">
-                {entry.coming_soon ? (
-                  <span className="inline-flex w-full items-center justify-center rounded-lg bg-neutral-100 px-3 py-2 text-sm text-neutral-500">
-                    Próximamente
-                  </span>
-                ) : isInstalled ? (
-                  <span className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                    Instalada
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => openWizard(entry)}
-                    className="w-full rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-                  >
-                    Instalar
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
+      <div className="mb-6 flex w-fit gap-1 rounded-lg border border-border p-1">
+        <Button
+          type="button"
+          variant={tab === "curated" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setTab("curated")}
+        >
+          Curated
+        </Button>
+        <Button
+          type="button"
+          variant={tab === "community" ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setTab("community")}
+        >
+          Community
+        </Button>
       </div>
 
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold">Instalar {selected.name}</h3>
-
-            {wizardStep === "secrets" && (
-              <div className="mt-4 space-y-4">
-                <p className="text-sm text-neutral-500">
-                  Esta integración requiere credenciales. Se guardarán de forma segura en el Llavero de macOS.
-                </p>
-                {integrationSecrets.map((s) => (
-                  <div key={s.secret_key}>
-                    <label className="block text-sm font-medium text-neutral-700">
-                      {s.label}
-                    </label>
-                    {s.connected ? (
-                      <p className="mt-1 text-sm text-emerald-600">Conectado</p>
-                    ) : (
-                      <input
-                        type="password"
-                        className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm"
-                        placeholder="Introduce tu clave API"
-                        value={secretValues[s.secret_key] ?? ""}
-                        onChange={(e) =>
-                          setSecretValues((prev) => ({
-                            ...prev,
-                            [s.secret_key]: e.target.value,
-                          }))
-                        }
-                      />
-                    )}
+      {tab === "curated" && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {catalog.map((entry) => {
+            const isInstalled = installedIds.has(entry.id);
+            return (
+              <Card key={entry.id}>
+                <CardHeader>
+                  <CardTitle>{entry.name}</CardTitle>
+                  <CardDescription className="line-clamp-2">
+                    {entry.description}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-1">
+                    {entry.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary">
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
+                </CardContent>
+                <CardFooter className="border-t-0 bg-transparent">
+                  {entry.coming_soon ? (
+                    <Badge variant="outline" className="w-full justify-center py-2">
+                      Coming soon
+                    </Badge>
+                  ) : isInstalled ? (
+                    <Badge
+                      className="w-full justify-center py-2 bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
+                    >
+                      Installed
+                    </Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      className="w-full"
+                      onClick={() => openWizard(entry)}
+                    >
+                      Install
+                    </Button>
+                  )}
+                </CardFooter>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "community" && (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <DiscoverySearchBar
+              query={communityQuery}
+              sort={communitySort}
+              onQueryChange={setCommunityQuery}
+              onSortChange={setCommunitySort}
+            />
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSync}
+                disabled={syncing}
+              >
+                {syncing ? "Updating…" : "Refresh index"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Last sync: {formatSyncTime(lastSyncedAt)}
+              </span>
+            </div>
+          </div>
+
+          {communityLoading ? (
+            <LoadingState />
+          ) : communityResults.length === 0 ? (
+            <Card className="border-dashed py-8 text-center shadow-none">
+              <CardContent>
+                <p className="text-sm text-muted-foreground">No results</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Try different keywords or refresh the index.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {communityTotal.toLocaleString()} MCP{communityTotal !== 1 ? "s" : ""} found
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {communityResults.map((entry) => (
+                  <DiscoveredMcpCard
+                    key={entry.id}
+                    entry={entry}
+                    onOpenSettings={onOpenSettings}
+                    onInstalled={onInstalled}
+                  />
                 ))}
               </div>
-            )}
+            </>
+          )}
+        </div>
+      )}
 
-            {(wizardStep === "clients" || wizardStep === "installing" || wizardStep === "done") && (
-              <div className="mt-4">
+      <Dialog
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open && wizardStep !== "installing") closeWizard();
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton={wizardStep !== "installing"}>
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Install {selected.name}</DialogTitle>
+                {wizardStep === "secrets" && (
+                  <DialogDescription>
+                    This integration requires credentials. They will be stored securely in the macOS Keychain.
+                  </DialogDescription>
+                )}
                 {wizardStep === "clients" && (
-                  <>
-                    <p className="text-sm text-neutral-500">
-                      Selecciona en qué clientes activar esta integración.
-                    </p>
-                    <div className="mt-3 space-y-2">
+                  <DialogDescription>
+                    Select which clients to enable this integration on.
+                  </DialogDescription>
+                )}
+              </DialogHeader>
+
+              {wizardStep === "secrets" && (
+                <div className="space-y-4">
+                  {integrationSecrets.map((s) => (
+                    <div key={s.secret_key} className="space-y-2">
+                      <Label htmlFor={s.secret_key}>{s.label}</Label>
+                      {s.connected ? (
+                        <p className="text-sm text-emerald-600 dark:text-emerald-400">Connected</p>
+                      ) : (
+                        <Input
+                          id={s.secret_key}
+                          type="password"
+                          placeholder="Enter your API key"
+                          value={secretValues[s.secret_key] ?? ""}
+                          onChange={(e) =>
+                            setSecretValues((prev) => ({
+                              ...prev,
+                              [s.secret_key]: e.target.value,
+                            }))
+                          }
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(wizardStep === "clients" || wizardStep === "installing" || wizardStep === "done") && (
+                <div>
+                  {wizardStep === "clients" && (
+                    <div className="space-y-2">
                       {clients.length === 0 ? (
-                        <p className="text-sm text-amber-600">
-                          No se detectaron clientes compatibles con sincronización. Revisa la sección Clientes.
+                        <p className="text-sm text-amber-600 dark:text-amber-400">
+                          No sync-capable clients were detected. Check Settings → Connections.
                         </p>
                       ) : (
                         clients.map((c) => (
                           <label
                             key={c.client_id}
-                            className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2"
+                            className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
                           >
-                            <input
-                              type="checkbox"
+                            <Checkbox
                               checked={selectedClients.has(c.client_id)}
-                              onChange={(e) => {
+                              onCheckedChange={(checked) => {
                                 const next = new Set(selectedClients);
-                                if (e.target.checked) next.add(c.client_id);
+                                if (checked) next.add(c.client_id);
                                 else next.delete(c.client_id);
                                 setSelectedClients(next);
                               }}
@@ -240,80 +418,77 @@ export function Discover({ onInstalled }: DiscoverProps) {
                         ))
                       )}
                     </div>
+                  )}
+                  {wizardStep === "installing" && (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      Installing integration…
+                    </p>
+                  )}
+                  {wizardStep === "done" && (
+                    <p className="py-4 text-center text-sm text-emerald-700 dark:text-emerald-400">
+                      {installMessage}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter>
+                {wizardStep === "done" ? (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      closeWizard();
+                      onInstalled();
+                    }}
+                  >
+                    View installed
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeWizard}
+                      disabled={wizardStep === "installing"}
+                    >
+                      Cancel
+                    </Button>
+                    {wizardStep === "secrets" && (
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const missing = integrationSecrets.filter(
+                            (s) =>
+                              s.required &&
+                              !s.connected &&
+                              !secretValues[s.secret_key]?.trim(),
+                          );
+                          if (missing.length > 0) {
+                            setError("Complete all required secrets");
+                            return;
+                          }
+                          setWizardStep("clients");
+                        }}
+                      >
+                        Continue
+                      </Button>
+                    )}
+                    {wizardStep === "clients" && (
+                      <Button
+                        type="button"
+                        onClick={handleInstall}
+                        disabled={selectedClients.size === 0}
+                      >
+                        Install
+                      </Button>
+                    )}
                   </>
                 )}
-                {wizardStep === "installing" && (
-                  <p className="py-8 text-center text-sm text-neutral-500">
-                    Instalando integración…
-                  </p>
-                )}
-                {wizardStep === "done" && (
-                  <p className="py-4 text-center text-sm text-emerald-700">
-                    {installMessage}
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end gap-2">
-              {wizardStep === "done" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeWizard();
-                    onInstalled();
-                  }}
-                  className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-                >
-                  Ver instaladas
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={closeWizard}
-                    disabled={wizardStep === "installing"}
-                    className="rounded-lg px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100"
-                  >
-                    Cancelar
-                  </button>
-                  {wizardStep === "secrets" && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const missing = integrationSecrets.filter(
-                          (s) =>
-                            s.required &&
-                            !s.connected &&
-                            !secretValues[s.secret_key]?.trim(),
-                        );
-                        if (missing.length > 0) {
-                          setError("Completa todos los secretos requeridos");
-                          return;
-                        }
-                        setWizardStep("clients");
-                      }}
-                      className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-                    >
-                      Continuar
-                    </button>
-                  )}
-                  {wizardStep === "clients" && (
-                    <button
-                      type="button"
-                      onClick={handleInstall}
-                      disabled={selectedClients.size === 0}
-                      className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                    >
-                      Instalar
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

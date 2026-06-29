@@ -4,12 +4,75 @@ use crate::catalog::Catalog;
 use crate::db::Database;
 use crate::detect::{build_server_for_integration, check_dependencies, sync_to_clients};
 use crate::health::{build_mcp_server, probe_server};
-use crate::models::InstallResult;
+use crate::models::{InstallResult, McpServer};
 use crate::secrets;
 
 pub struct InstallEngine<'a> {
     pub db: &'a Database,
     pub catalog: &'a Catalog,
+}
+
+pub fn install_resolved_server(
+    db: &Database,
+    server: &McpServer,
+    integration_id: &str,
+    source: &str,
+    client_ids: &[String],
+) -> Result<InstallResult, String> {
+    if client_ids.is_empty() {
+        return Err("Select at least one client".to_string());
+    }
+
+    sync_to_clients(server, client_ids, false)?;
+
+    let probe = probe_server(server);
+    let status = if probe.ok { "connected" } else { "error" };
+
+    let existing = db
+        .get_installation_by_integration(integration_id)
+        .map_err(|e| e.to_string())?;
+    let installation_id = existing
+        .as_ref()
+        .map(|i| i.id.clone())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    db.upsert_installation_with_source(
+        &installation_id,
+        integration_id,
+        true,
+        status,
+        probe.detail.as_deref(),
+        source,
+    )
+    .map_err(|e| e.to_string())?;
+
+    for client_id in client_ids {
+        db.set_client_target(&installation_id, client_id, true)
+            .map_err(|e| e.to_string())?;
+    }
+
+    db.insert_health_check(
+        &installation_id,
+        probe.latency_ms,
+        probe.ok,
+        probe.detail.as_deref(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    let message = if probe.ok {
+        "Integration installed successfully".to_string()
+    } else {
+        format!(
+            "Installed with warnings: {}",
+            probe.detail.unwrap_or_default()
+        )
+    };
+
+    Ok(InstallResult {
+        installation_id,
+        success: probe.ok,
+        message,
+    })
 }
 
 impl<'a> InstallEngine<'a> {
@@ -21,10 +84,10 @@ impl<'a> InstallEngine<'a> {
         let entry = self
             .catalog
             .get(integration_id)
-            .ok_or_else(|| format!("Integración no encontrada: {integration_id}"))?;
+            .ok_or_else(|| format!("Integration not found: {integration_id}"))?;
 
         if entry.coming_soon {
-            return Err("Esta integración aún no está disponible".to_string());
+            return Err("This integration is not available yet".to_string());
         }
 
         let deps = check_dependencies(&entry.server.requires);
@@ -32,7 +95,7 @@ impl<'a> InstallEngine<'a> {
         if !missing_deps.is_empty() {
             let names: Vec<_> = missing_deps.iter().map(|d| d.name.as_str()).collect();
             return Err(format!(
-                "Dependencias faltantes: {}. Instálalas antes de continuar.",
+                "Missing dependencies: {}. Install them before continuing.",
                 names.join(", ")
             ));
         }
@@ -40,7 +103,7 @@ impl<'a> InstallEngine<'a> {
         let missing_secrets = secrets::missing_required_secrets(integration_id, &entry.secrets);
         if !missing_secrets.is_empty() {
             return Err(format!(
-                "Configura los secretos requeridos antes de instalar: {}",
+                "Configure required secrets before installing: {}",
                 missing_secrets.join(", ")
             ));
         }
@@ -48,68 +111,35 @@ impl<'a> InstallEngine<'a> {
         let server = build_server_for_integration(self.catalog, integration_id)?;
 
         if client_ids.is_empty() {
-            return Err("Selecciona al menos un cliente".to_string());
+            return Err("Select at least one client".to_string());
         }
-
-        sync_to_clients(&server, &client_ids, false)?;
-
-        let existing = self
-            .db
-            .get_installation_by_integration(integration_id)
-            .map_err(|e| e.to_string())?;
-        let installation_id = existing
-            .as_ref()
-            .map(|i| i.id.clone())
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
 
         let env = secrets::resolve_env(integration_id, &entry.secrets)
             .map_err(|e| e.to_string())?;
         let probe_server_def = build_mcp_server(self.catalog, integration_id, env)
             .map_err(|e| e.to_string())?;
+
+        let result = install_resolved_server(
+            self.db,
+            &server,
+            integration_id,
+            "curated",
+            &client_ids,
+        )?;
+
         let probe = probe_server(&probe_server_def);
 
-        let status = if probe.ok {
-            "connected"
-        } else {
-            "error"
-        };
-
-        self.db
-            .upsert_installation(
-                &installation_id,
-                integration_id,
-                true,
-                status,
-                probe.detail.as_deref(),
-            )
-            .map_err(|e| e.to_string())?;
-
-        for client_id in &client_ids {
-            self.db
-                .set_client_target(&installation_id, client_id, true)
-                .map_err(|e| e.to_string())?;
-        }
-
-        self.db
-            .insert_health_check(
-                &installation_id,
-                probe.latency_ms,
-                probe.ok,
-                probe.detail.as_deref(),
-            )
-            .map_err(|e| e.to_string())?;
-
         let message = if probe.ok {
-            "Integración instalada correctamente".to_string()
+            result.message
         } else {
             format!(
-                "Instalada con advertencias: {}",
+                "Installed with warnings: {}",
                 probe.detail.unwrap_or_default()
             )
         };
 
         Ok(InstallResult {
-            installation_id,
+            installation_id: result.installation_id,
             success: probe.ok,
             message,
         })

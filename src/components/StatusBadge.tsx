@@ -1,23 +1,41 @@
-const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+
+const STATUS_LABELS: Record<
+  string,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; className?: string }
+> = {
   connected: {
-    label: "Conectado",
-    className: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+    label: "Connected",
+    variant: "default",
+    className:
+      "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
   },
   needs_secret: {
-    label: "API Key requerida",
-    className: "bg-amber-50 text-amber-700 ring-amber-600/20",
+    label: "API Key required",
+    variant: "secondary",
+    className:
+      "bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
   },
   error: {
     label: "Error",
-    className: "bg-red-50 text-red-700 ring-red-600/20",
+    variant: "destructive",
   },
   disabled: {
-    label: "Desactivado",
-    className: "bg-neutral-100 text-neutral-600 ring-neutral-500/20",
+    label: "Disabled",
+    variant: "outline",
+  },
+  installed: {
+    label: "Installed",
+    variant: "default",
+    className:
+      "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
   },
   update_available: {
-    label: "Actualización disponible",
-    className: "bg-blue-50 text-blue-700 ring-blue-600/20",
+    label: "Update available",
+    variant: "secondary",
+    className:
+      "bg-blue-500/10 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400",
   },
 };
 
@@ -28,14 +46,12 @@ interface StatusBadgeProps {
 export function StatusBadge({ status }: StatusBadgeProps) {
   const config = STATUS_LABELS[status] ?? {
     label: status,
-    className: "bg-neutral-100 text-neutral-600 ring-neutral-500/20",
+    variant: "outline" as const,
   };
 
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${config.className}`}
-    >
+    <Badge variant={config.variant} className={cn(config.className)}>
       {config.label}
-    </span>
+    </Badge>
   );
 }

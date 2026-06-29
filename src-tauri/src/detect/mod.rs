@@ -92,16 +92,16 @@ pub fn build_server_for_integration(
 ) -> Result<McpServer, String> {
     let entry = catalog
         .get(integration_id)
-        .ok_or_else(|| format!("Integración no encontrada: {integration_id}"))?;
+        .ok_or_else(|| format!("Integration not found: {integration_id}"))?;
 
     if entry.coming_soon {
-        return Err("Esta integración aún no está disponible".to_string());
+        return Err("This integration is not available yet".to_string());
     }
 
     let missing = secrets::missing_required_secrets(integration_id, &entry.secrets);
     if !missing.is_empty() {
         return Err(format!(
-            "Faltan secretos requeridos: {}",
+            "Missing required secrets: {}",
             missing.join(", ")
         ));
     }

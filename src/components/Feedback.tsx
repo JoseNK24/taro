@@ -1,3 +1,16 @@
+import type { ReactNode } from "react";
+import { XIcon } from "lucide-react";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+
 interface ErrorBannerProps {
   message: string;
   onDismiss?: () => void;
@@ -5,18 +18,22 @@ interface ErrorBannerProps {
 
 export function ErrorBanner({ message, onDismiss }: ErrorBannerProps) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-      <span>{message}</span>
+    <Alert variant="destructive" className="mb-4">
+      <AlertDescription>{message}</AlertDescription>
       {onDismiss && (
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="shrink-0 text-red-600 hover:text-red-800"
-        >
-          ×
-        </button>
+        <AlertAction>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={onDismiss}
+            aria-label="Close"
+          >
+            <XIcon />
+          </Button>
+        </AlertAction>
       )}
-    </div>
+    </Alert>
   );
 }
 
@@ -24,10 +41,11 @@ interface LoadingStateProps {
   message?: string;
 }
 
-export function LoadingState({ message = "Cargando…" }: LoadingStateProps) {
+export function LoadingState({ message = "Loading…" }: LoadingStateProps) {
   return (
-    <div className="flex items-center justify-center py-16 text-sm text-neutral-500">
-      {message}
+    <div className="flex flex-col items-center justify-center gap-3 py-16">
+      <Skeleton className="h-4 w-32" />
+      <p className="text-sm text-muted-foreground">{message}</p>
     </div>
   );
 }
@@ -35,17 +53,17 @@ export function LoadingState({ message = "Cargando…" }: LoadingStateProps) {
 interface EmptyStateProps {
   title: string;
   description?: string;
-  action?: React.ReactNode;
+  action?: ReactNode;
 }
 
 export function EmptyState({ title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-neutral-200 bg-white py-16 text-center">
-      <p className="text-sm font-medium text-neutral-700">{title}</p>
-      {description && (
-        <p className="mt-1 max-w-sm text-sm text-neutral-500">{description}</p>
-      )}
-      {action && <div className="mt-4">{action}</div>}
-    </div>
+    <Card className="border-dashed py-16 text-center shadow-none">
+      <CardHeader className="items-center">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      {action && <CardContent>{action}</CardContent>}
+    </Card>
   );
 }

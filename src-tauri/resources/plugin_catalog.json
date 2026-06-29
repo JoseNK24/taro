@@ -1,0 +1,119 @@
+[
+  {
+    "id": "ponytail",
+    "name": "Ponytail",
+    "description": "Hace que el agente escriba el mínimo código que funciona (YAGNI, stdlib primero).",
+    "tags": ["skills", "yagni", "hooks"],
+    "icon": "ponytail",
+    "github_url": "https://github.com/DietrichGebert/ponytail",
+    "github_stars": 54000,
+    "marketplace": {
+      "source": "DietrichGebert/ponytail",
+      "plugin_id": "ponytail",
+      "marketplace_name": "ponytail"
+    },
+    "client_install": {
+      "claude-code": { "method": "marketplace_cli" },
+      "codex": { "method": "marketplace_cli" },
+      "cursor": {
+        "method": "repo_files",
+        "files": [".cursor/rules/ponytail.mdc"]
+      },
+      "windsurf": {
+        "method": "repo_files",
+        "files": ["AGENTS.md"]
+      },
+      "cline": {
+        "method": "repo_files",
+        "files": [".clinerules"]
+      },
+      "continue": {
+        "method": "repo_files",
+        "files": [".continue/rules/ponytail.md"]
+      },
+      "gemini-cli": {
+        "method": "extension_cli",
+        "package": "github.com/DietrichGebert/ponytail"
+      },
+      "claude-desktop": { "method": "coming_soon" }
+    }
+  },
+  {
+    "id": "superpowers",
+    "name": "Superpowers",
+    "description": "Colección de skills para desarrollo: brainstorming, TDD, debugging y revisión de código.",
+    "tags": ["skills", "tdd", "workflow"],
+    "icon": "superpowers",
+    "github_url": "https://github.com/obra/superpowers",
+    "github_stars": 12000,
+    "marketplace": {
+      "source": "obra/superpowers",
+      "plugin_id": "superpowers",
+      "marketplace_name": "superpowers"
+    },
+    "client_install": {
+      "claude-code": { "method": "marketplace_cli" },
+      "codex": { "method": "marketplace_cli" },
+      "cursor": {
+        "method": "repo_files",
+        "files": [".cursor/rules/superpowers.mdc"]
+      },
+      "windsurf": {
+        "method": "repo_files",
+        "files": ["AGENTS.md"]
+      },
+      "cline": {
+        "method": "repo_files",
+        "files": [".clinerules"]
+      },
+      "continue": {
+        "method": "repo_files",
+        "files": [".continue/rules/superpowers.md"]
+      },
+      "gemini-cli": {
+        "method": "extension_cli",
+        "package": "github.com/obra/superpowers"
+      },
+      "claude-desktop": { "method": "coming_soon" }
+    }
+  },
+  {
+    "id": "frontend-design",
+    "name": "Frontend Design",
+    "description": "Skill para crear interfaces distintivas y pulidas, evitando estéticas genéricas de IA.",
+    "tags": ["skills", "design", "ui"],
+    "icon": "design",
+    "github_url": "https://github.com/anthropics/claude-code",
+    "github_stars": 8000,
+    "marketplace": {
+      "source": "anthropics/claude-code",
+      "plugin_id": "frontend-design",
+      "marketplace_name": "claude-code-plugins"
+    },
+    "client_install": {
+      "claude-code": { "method": "marketplace_cli" },
+      "codex": { "method": "marketplace_cli" },
+      "cursor": {
+        "method": "repo_files",
+        "files": [".cursor/rules/frontend-design.mdc"]
+      },
+      "windsurf": {
+        "method": "repo_files",
+        "files": ["AGENTS.md"]
+      },
+      "cline": {
+        "method": "repo_files",
+        "files": [".clinerules"]
+      },
+      "continue": {
+        "method": "repo_files",
+        "files": [".continue/rules/frontend-design.md"]
+      },
+      "gemini-cli": {
+        "method": "extension_cli",
+        "package": "github.com/anthropics/claude-code"
+      },
+      "claude-desktop": { "method": "coming_soon" }
+    }
+  }
+]

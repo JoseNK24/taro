@@ -24,3 +24,6 @@ uuid = { version = "1", features = ["v4"] }
 thiserror = "2"
 dirs = "6"
 toml = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
+urlencoding = "2"

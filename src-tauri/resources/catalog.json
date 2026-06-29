@@ -1,9 +1,9 @@
 [
   {
     "id": "filesystem",
-    "name": "Sistema de archivos",
-    "description": "Accede a archivos y carpetas locales de forma segura desde tu asistente.",
-    "tags": ["archivos", "local"],
+    "name": "Filesystem",
+    "description": "Securely access local files and folders from your assistant.",
+    "tags": ["files", "local"],
     "icon": "folder",
     "coming_soon": false,
     "server": {
@@ -16,8 +16,8 @@
   {
     "id": "brave-search",
     "name": "Brave Search",
-    "description": "Busca en la web desde tu asistente con resultados en tiempo real.",
-    "tags": ["búsqueda", "web"],
+    "description": "Search the web from your assistant with real-time results.",
+    "tags": ["search", "web"],
     "icon": "brave",
     "coming_soon": false,
     "server": {
@@ -36,8 +36,8 @@
   {
     "id": "github",
     "name": "GitHub",
-    "description": "Gestiona repositorios, issues y pull requests desde tu asistente.",
-    "tags": ["código", "git"],
+    "description": "Manage repositories, issues, and pull requests from your assistant.",
+    "tags": ["code", "git"],
     "icon": "github",
     "coming_soon": false,
     "server": {
@@ -48,7 +48,7 @@
     "secrets": [
       {
         "key": "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "label": "Token de acceso personal",
+        "label": "Personal access token",
         "required": true
       }
     ]
@@ -56,8 +56,8 @@
   {
     "id": "notion",
     "name": "Notion",
-    "description": "Conecta tus páginas y bases de datos de Notion.",
-    "tags": ["productividad"],
+    "description": "Connect your Notion pages and databases.",
+    "tags": ["productivity"],
     "icon": "notion",
     "coming_soon": true,
     "server": {
@@ -76,8 +76,8 @@
   {
     "id": "slack",
     "name": "Slack",
-    "description": "Envía mensajes y consulta canales de Slack.",
-    "tags": ["comunicación"],
+    "description": "Send messages and query Slack channels.",
+    "tags": ["communication"],
     "icon": "slack",
     "coming_soon": true,
     "server": {
@@ -96,8 +96,8 @@
   {
     "id": "postgres",
     "name": "PostgreSQL",
-    "description": "Consulta bases de datos PostgreSQL de forma segura.",
-    "tags": ["datos", "base de datos"],
+    "description": "Query PostgreSQL databases securely.",
+    "tags": ["data", "database"],
     "icon": "database",
     "coming_soon": true,
     "server": {
@@ -108,7 +108,7 @@
     "secrets": [
       {
         "key": "POSTGRES_CONNECTION_STRING",
-        "label": "Cadena de conexión",
+        "label": "Connection string",
         "required": true
       }
     ]

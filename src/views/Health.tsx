@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { StatusBadge } from "../components/StatusBadge";
 import { ErrorBanner, EmptyState, LoadingState } from "../components/Feedback";
 import { PageHeader } from "../components/Sidebar";
@@ -68,36 +70,35 @@ export function Health() {
   return (
     <div>
       <PageHeader
-        title="Salud"
-        description="Estado de conexión de tus integraciones instaladas."
+        title="Health"
+        description="Connection status of your installed integrations."
         action={
-          <button
+          <Button
             type="button"
             disabled={checking || installations.length === 0}
             onClick={handleCheckAll}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            {checking ? "Comprobando…" : "Comprobar todo"}
-          </button>
+            {checking ? "Checking…" : "Check all"}
+          </Button>
         }
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {installations.length === 0 ? (
         <EmptyState
-          title="Sin integraciones para comprobar"
-          description="Instala una integración para ver su estado de salud aquí."
+          title="No integrations to check"
+          description="Install an integration to see its health status here."
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <Card className="overflow-hidden py-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-100 bg-neutral-50 text-left text-neutral-500">
-                <th className="px-4 py-3 font-medium">Integración</th>
-                <th className="px-4 py-3 font-medium">Estado</th>
-                <th className="px-4 py-3 font-medium">Latencia</th>
-                <th className="px-4 py-3 font-medium">Última comprobación</th>
-                <th className="px-4 py-3 font-medium">Detalle</th>
+              <tr className="border-b border-border bg-muted/50 text-left text-muted-foreground">
+                <th className="px-4 py-3 font-medium">Integration</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Latency</th>
+                <th className="px-4 py-3 font-medium">Last checked</th>
+                <th className="px-4 py-3 font-medium">Detail</th>
                 <th className="px-4 py-3 font-medium" />
               </tr>
             </thead>
@@ -109,9 +110,9 @@ export function Health() {
                 return (
                   <tr
                     key={inst.id}
-                    className="border-b border-neutral-50 last:border-0"
+                    className="border-b border-border/50 last:border-0"
                   >
-                    <td className="px-4 py-3 font-medium text-neutral-800">
+                    <td className="px-4 py-3 font-medium text-foreground">
                       {check?.integration_name ?? inst.integration_id}
                     </td>
                     <td className="px-4 py-3">
@@ -119,35 +120,36 @@ export function Health() {
                         status={check?.ok ? "connected" : check ? "error" : "disabled"}
                       />
                     </td>
-                    <td className="px-4 py-3 text-neutral-600">
+                    <td className="px-4 py-3 text-foreground">
                       {check?.latency_ms != null
                         ? `${check.latency_ms} ms`
                         : "—"}
                     </td>
-                    <td className="px-4 py-3 text-xs text-neutral-500">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {check
-                        ? new Date(check.checked_at).toLocaleString("es-ES")
+                        ? new Date(check.checked_at).toLocaleString("en-US")
                         : "—"}
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-xs text-neutral-500">
+                    <td className="max-w-xs truncate px-4 py-3 text-xs text-muted-foreground">
                       {check?.detail ?? "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         disabled={checking}
                         onClick={() => handleCheckOne(inst.id)}
-                        className="text-xs text-neutral-600 hover:text-neutral-900"
                       >
-                        Comprobar
-                      </button>
+                        Check
+                      </Button>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
     </div>
   );

@@ -37,7 +37,7 @@ pub fn probe_server(server: &McpServer) -> ProbeResult {
         Ok(out) if out.status.success() => ProbeResult {
             ok: true,
             latency_ms: Some(latency_ms),
-            detail: Some("Proceso iniciado correctamente".to_string()),
+            detail: Some("Process started successfully".to_string()),
         },
         Ok(out) => {
             // Some MCP servers don't support --version; try without it
@@ -49,7 +49,7 @@ pub fn probe_server(server: &McpServer) -> ProbeResult {
                 Ok(fb) if fb.status.success() || fb.status.code() == Some(0) => ProbeResult {
                     ok: true,
                     latency_ms: Some(latency_ms),
-                    detail: Some("Servidor responde".to_string()),
+                    detail: Some("Server responding".to_string()),
                 },
                 Ok(fb) => {
                     let stderr = String::from_utf8_lossy(&fb.stderr);
@@ -57,7 +57,7 @@ pub fn probe_server(server: &McpServer) -> ProbeResult {
                         ok: false,
                         latency_ms: Some(latency_ms),
                         detail: Some(if stderr.is_empty() {
-                            format!("Código de salida: {:?}", fb.status.code())
+                            format!("Exit code: {:?}", fb.status.code())
                         } else {
                             stderr.chars().take(200).collect()
                         }),

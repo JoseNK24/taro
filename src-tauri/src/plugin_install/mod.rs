@@ -1,0 +1,254 @@
+use uuid::Uuid;
+
+use crate::adapters::detect_all_clients;
+use crate::db::Database;
+use crate::models::{
+    PluginClientInstallResult, PluginInstallResult, PluginInstallStrategy,
+};
+use crate::plugin_adapters::{
+    check_cli_for_client, check_plugin_dependencies, effective_strategy,
+    install_plugin_for_client, is_strategy_supported, strategy_for_client,
+    uninstall_plugin_for_client,
+};
+use crate::plugin_catalog::PluginCatalog;
+
+pub struct PluginInstallEngine<'a> {
+    pub db: &'a Database,
+    pub catalog: &'a PluginCatalog,
+}
+
+impl<'a> PluginInstallEngine<'a> {
+    pub fn install(
+        &self,
+        plugin_id: &str,
+        client_ids: Vec<String>,
+    ) -> Result<PluginInstallResult, String> {
+        let entry = self
+            .catalog
+            .get(plugin_id)
+            .ok_or_else(|| format!("Plugin no encontrado: {plugin_id}"))?;
+
+        if entry.coming_soon {
+            return Err("Este plugin aún no está disponible".to_string());
+        }
+
+        if client_ids.is_empty() {
+            return Err("Selecciona al menos un cliente".to_string());
+        }
+
+        let detected = detect_all_clients();
+        let mut client_results = Vec::new();
+
+        for client_id in &client_ids {
+            let detection = detected.iter().find(|d| &d.client_id == client_id);
+            let sync_supported = detection.map(|d| d.sync_supported).unwrap_or(false);
+            let strategy = effective_strategy(entry, client_id, sync_supported);
+
+            if !is_strategy_supported(&strategy) {
+                let message = match &strategy {
+                    PluginInstallStrategy::ComingSoon => {
+                        "Próximamente para este cliente".to_string()
+                    }
+                    _ => "Sincronización no disponible para este cliente".to_string(),
+                };
+                client_results.push(PluginClientInstallResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message,
+                });
+                continue;
+            }
+
+            let Some(det) = detection else {
+                client_results.push(PluginClientInstallResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message: "Cliente no reconocido".to_string(),
+                });
+                continue;
+            };
+
+            if !det.detected {
+                client_results.push(PluginClientInstallResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message: format!("{} no está instalado en este sistema", det.display_name),
+                });
+                continue;
+            }
+
+            if let Err(e) = check_plugin_dependencies(&strategy) {
+                return Err(e);
+            }
+            if let Err(e) = check_cli_for_client(client_id, &strategy) {
+                client_results.push(PluginClientInstallResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message: e,
+                });
+                continue;
+            }
+
+            match install_plugin_for_client(entry, client_id, &strategy) {
+                Ok(()) => {
+                    client_results.push(PluginClientInstallResult {
+                        client_id: client_id.clone(),
+                        success: true,
+                        message: format!("Instalado en {}", det.display_name),
+                    });
+                }
+                Err(e) => {
+                    client_results.push(PluginClientInstallResult {
+                        client_id: client_id.clone(),
+                        success: false,
+                        message: e.to_string(),
+                    });
+                }
+            }
+        }
+
+        let successful: Vec<_> = client_results.iter().filter(|r| r.success).collect();
+        if successful.is_empty() {
+            let messages: Vec<_> = client_results
+                .iter()
+                .map(|r| format!("{}: {}", r.client_id, r.message))
+                .collect();
+            return Err(messages.join("; "));
+        }
+
+        let existing = self
+            .db
+            .get_plugin_installation_by_plugin(plugin_id)
+            .map_err(|e| e.to_string())?;
+        let installation_id = existing
+            .as_ref()
+            .map(|i| i.id.clone())
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+        let has_errors = client_results.iter().any(|r| !r.success);
+        let status = if has_errors { "error" } else { "installed" };
+        let error_message = if has_errors {
+            Some(
+                client_results
+                    .iter()
+                    .filter(|r| !r.success)
+                    .map(|r| format!("{}: {}", r.client_id, r.message))
+                    .collect::<Vec<_>>()
+                    .join("; "),
+            )
+        } else {
+            None
+        };
+
+        self.db
+            .upsert_plugin_installation(
+                &installation_id,
+                plugin_id,
+                true,
+                status,
+                error_message.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
+
+        for result in &client_results {
+            if result.success {
+                self.db
+                    .set_plugin_client_target(
+                        &installation_id,
+                        &result.client_id,
+                        true,
+                        "installed",
+                        None,
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+
+        let message = if has_errors {
+            format!(
+                "Plugin instalado con advertencias en {} cliente(s)",
+                successful.len()
+            )
+        } else {
+            "Plugin instalado correctamente".to_string()
+        };
+
+        Ok(PluginInstallResult {
+            installation_id,
+            success: !has_errors,
+            message,
+            client_results,
+        })
+    }
+
+    pub fn uninstall(&self, installation_id: &str) -> Result<(), String> {
+        let installation = self
+            .db
+            .get_plugin_installation(installation_id)
+            .map_err(|e| e.to_string())?;
+
+        let entry = self
+            .catalog
+            .get(&installation.plugin_id)
+            .ok_or_else(|| format!("Plugin no encontrado: {}", installation.plugin_id))?;
+
+        let targets = self
+            .db
+            .list_plugin_client_targets(installation_id)
+            .map_err(|e| e.to_string())?;
+
+        for target in targets.iter().filter(|t| t.enabled) {
+            if let Some(strategy) = strategy_for_client(entry, &target.client_id) {
+                let _ = uninstall_plugin_for_client(entry, &target.client_id, strategy);
+            }
+        }
+
+        self.db
+            .delete_plugin_installation(installation_id)
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn set_enabled(&self, installation_id: &str, enabled: bool) -> Result<(), String> {
+        let installation = self
+            .db
+            .get_plugin_installation(installation_id)
+            .map_err(|e| e.to_string())?;
+
+        let entry = self
+            .catalog
+            .get(&installation.plugin_id)
+            .ok_or_else(|| format!("Plugin no encontrado: {}", installation.plugin_id))?;
+
+        let targets = self
+            .db
+            .list_enabled_plugin_client_targets(installation_id)
+            .map_err(|e| e.to_string())?;
+
+        if enabled {
+            for target in &targets {
+                if let Some(strategy) = strategy_for_client(entry, &target.client_id) {
+                    install_plugin_for_client(entry, &target.client_id, strategy)
+                        .map_err(|e| e.to_string())?;
+                }
+            }
+        } else {
+            for target in &targets {
+                if let Some(strategy) = strategy_for_client(entry, &target.client_id) {
+                    let _ = uninstall_plugin_for_client(entry, &target.client_id, strategy);
+                }
+            }
+        }
+
+        self.db
+            .set_plugin_installation_enabled(installation_id, enabled)
+            .map_err(|e| e.to_string())?;
+
+        let status = if enabled { "installed" } else { "disabled" };
+        self.db
+            .update_plugin_installation_status(installation_id, status, None)
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    }
+}
