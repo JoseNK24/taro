@@ -78,6 +78,7 @@ pub fn check_all_dependencies() -> Vec<DependencyStatus> {
 fn which_path(cmd: &str) -> Option<String> {
     std::process::Command::new("which")
         .arg(cmd)
+        .env("PATH", crate::harness::util::login_shell_path())
         .output()
         .ok()
         .filter(|o| o.status.success())

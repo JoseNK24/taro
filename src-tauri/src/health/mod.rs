@@ -27,6 +27,7 @@ pub fn probe_server(server: &McpServer) -> ProbeResult {
     let start = Instant::now();
     let output = Command::new(&server.command)
         .args(&server.args)
+        .env("PATH", crate::harness::util::login_shell_path())
         .envs(&server.env)
         .arg("--version")
         .output();
@@ -43,6 +44,7 @@ pub fn probe_server(server: &McpServer) -> ProbeResult {
             // Some MCP servers don't support --version; try without it
             let fallback = Command::new(&server.command)
                 .args(&server.args)
+                .env("PATH", crate::harness::util::login_shell_path())
                 .envs(&server.env)
                 .output();
             match fallback {
