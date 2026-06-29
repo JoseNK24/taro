@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ClientName } from "@/components/ClientLogo";
 import type { HarnessDriverInfo } from "../../types";
 
 interface AddHarnessDialogProps {
@@ -90,8 +91,13 @@ export function AddHarnessDialog({
                     : "border-border"
                 } ${!driver.detected ? "opacity-50" : "hover:bg-muted/50"}`}
               >
-                <div className="font-medium text-foreground">
-                  {driver.display_name}
+                <div className="flex items-start gap-2">
+                  <ClientName
+                    clientId=""
+                    driverKind={driver.kind}
+                    name={driver.display_name}
+                    className="font-medium text-foreground"
+                  />
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {driver.detected

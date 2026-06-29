@@ -61,7 +61,6 @@ pub fn all_adapters() -> Vec<Box<dyn ClientAdapter>> {
     use json_mcp::JsonMcpAdapter;
 
     vec![
-        // Sync supported — JSON mcpServers
         Box::new(JsonMcpAdapter::new(
             "cursor",
             "Cursor",
@@ -70,49 +69,13 @@ pub fn all_adapters() -> Vec<Box<dyn ClientAdapter>> {
             &["cursor", "cursor-agent"],
         )),
         Box::new(JsonMcpAdapter::new(
-            "claude-desktop",
-            "Claude Desktop",
-            "~/Library/Application Support/Claude/claude_desktop_config.json",
-            &["/Applications/Claude.app"],
-            &[],
-        )),
-        Box::new(JsonMcpAdapter::new(
             "claude-code",
-            "Claude Code",
+            "Claude",
             "~/.claude.json",
             &[],
             &["claude"],
         )),
-        Box::new(JsonMcpAdapter::new(
-            "windsurf",
-            "Windsurf",
-            "~/.codeium/windsurf/mcp_config.json",
-            &["/Applications/Windsurf.app"],
-            &["windsurf"],
-        )),
-        Box::new(JsonMcpAdapter::new(
-            "cline",
-            "Cline",
-            "~/.cline/data/settings/cline_mcp_settings.json",
-            &[],
-            &["cline"],
-        )),
-        Box::new(JsonMcpAdapter::new(
-            "gemini-cli",
-            "Gemini CLI",
-            "~/.gemini/settings.json",
-            &[],
-            &["gemini"],
-        )),
-        Box::new(JsonMcpAdapter::new(
-            "continue",
-            "Continue",
-            "~/.continue/config.json",
-            &[],
-            &["continue"],
-        )),
         Box::new(codex::CodexAdapter::new()),
-        // Detect only — sync coming later
         Box::new(detect_only::DetectOnlyAdapter::new(
             "opencode",
             "OpenCode",
@@ -121,80 +84,12 @@ pub fn all_adapters() -> Vec<Box<dyn ClientAdapter>> {
             &["/Applications/OpenCode.app"],
             &["opencode"],
         )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "openclaw",
-            "OpenClaw",
-            "~/.openclaw/openclaw.json",
+        Box::new(JsonMcpAdapter::new(
+            "gemini-cli",
+            "Gemini",
+            "~/.gemini/settings.json",
             &[],
-            &[],
-            &["openclaw"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "hermes",
-            "Hermes Agent",
-            "~/.hermes/config.yaml",
-            &[],
-            &[],
-            &["hermes"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "vscode",
-            "VS Code",
-            "~/Library/Application Support/Code/User/globalStorage/mcp.json",
-            &[],
-            &[
-                "/Applications/Visual Studio Code.app",
-                "/Applications/Visual Studio Code - Insiders.app",
-            ],
-            &["code", "code-insiders"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "zed",
-            "Zed",
-            "~/.config/zed/settings.json",
-            &[],
-            &["/Applications/Zed.app"],
-            &["zed"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "roo-code",
-            "Roo Code",
-            "~/.roo/mcp.json",
-            &[],
-            &[],
-            &[],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "open-interpreter",
-            "Open Interpreter",
-            "~/.config/open-interpreter/config.json",
-            &[],
-            &[],
-            &["interpreter", "oi"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "goose",
-            "Goose",
-            "~/.config/goose/config.yaml",
-            &[],
-            &["/Applications/Goose.app"],
-            &["goose"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "amazon-q",
-            "Amazon Q Developer",
-            "~/.aws/amazonq/mcp.json",
-            &[],
-            &[],
-            &["q"],
-        )),
-        Box::new(detect_only::DetectOnlyAdapter::new(
-            "jetbrains",
-            "JetBrains AI",
-            "~/Library/Application Support/JetBrains/mcp.json",
-            &[],
-            &["/Applications/IntelliJ IDEA.app"],
-            &[],
+            &["gemini"],
         )),
     ]
 }

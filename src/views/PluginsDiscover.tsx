@@ -10,8 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorBanner, LoadingState } from "../components/Feedback";
+import { ClientName } from "@/components/ClientLogo";
 import {
-  CLIENT_LABELS,
   isStrategySupported,
   PluginCard,
 } from "../components/PluginCard";
@@ -22,6 +22,11 @@ import {
   getPluginInstallations,
   installPlugin,
 } from "../hooks/useTauri";
+import {
+  filterSupportedClients,
+  getClientLabel,
+  isSupportedClientId,
+} from "@/lib/clients";
 import type { DetectionResult, PluginCatalogEntry } from "../types";
 
 interface PluginsDiscoverProps {
@@ -35,6 +40,7 @@ function compatibleClients(
   detected: DetectionResult[],
 ): DetectionResult[] {
   return detected.filter((c) => {
+    if (!isSupportedClientId(c.client_id)) return false;
     const strategy = entry.client_install[c.client_id];
     return c.detected && isStrategySupported(strategy);
   });
@@ -66,7 +72,7 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
       ]);
       setCatalog(cat);
       setInstalledIds(new Set(installs.map((i) => i.plugin_id)));
-      setClients(detected);
+      setClients(filterSupportedClients(detected));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -203,7 +209,11 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
                                 setSelectedClients(next);
                               }}
                             />
-                            <span className="text-sm">{c.display_name}</span>
+                            <ClientName
+                              clientId={c.client_id}
+                              name={c.display_name}
+                              className="text-sm"
+                            />
                           </label>
                         ))
                       )}
@@ -230,8 +240,7 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
                                   : "text-destructive"
                               }
                             >
-                              {CLIENT_LABELS[r.client_id] ?? r.client_id}:{" "}
-                              {r.message}
+                              {getClientLabel(r.client_id)}: {r.message}
                             </li>
                           ))}
                         </ul>

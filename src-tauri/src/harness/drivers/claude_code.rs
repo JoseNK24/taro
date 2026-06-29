@@ -14,7 +14,7 @@ impl HarnessDriver for ClaudeCodeDriver {
     }
 
     fn display_name(&self) -> &str {
-        "Claude Code"
+        "Claude"
     }
 
     fn install_hint(&self) -> Option<&str> {

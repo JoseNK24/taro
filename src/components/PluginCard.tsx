@@ -8,18 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ClientLogo } from "@/components/ClientLogo";
+import {
+  CLIENT_LABELS,
+  isSupportedClientId,
+  type SupportedClientId,
+} from "@/lib/clients";
 import type { PluginCatalogEntry } from "../types";
-
-const CLIENT_LABELS: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  cursor: "Cursor",
-  windsurf: "Windsurf",
-  cline: "Cline",
-  continue: "Continue",
-  "gemini-cli": "Gemini CLI",
-  "claude-desktop": "Claude Desktop",
-};
 
 function isStrategySupported(
   strategy: PluginCatalogEntry["client_install"][string] | undefined,
@@ -28,10 +23,10 @@ function isStrategySupported(
   return strategy.method !== "coming_soon" && strategy.method !== "unsupported";
 }
 
-function supportedClientIds(entry: PluginCatalogEntry): string[] {
+function supportedClientIds(entry: PluginCatalogEntry): SupportedClientId[] {
   return Object.entries(entry.client_install)
-    .filter(([, strategy]) => isStrategySupported(strategy))
-    .map(([id]) => id);
+    .filter(([id, strategy]) => isSupportedClientId(id) && isStrategySupported(strategy))
+    .map(([id]) => id as SupportedClientId);
 }
 
 function formatStars(stars: number): string {
@@ -74,10 +69,11 @@ export function PluginCard({ entry, installed, onInstall }: PluginCardProps) {
           ))}
         </div>
         {clients.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-2">
             {clients.map((id) => (
-              <Badge key={id} variant="outline" className="text-xs">
-                {CLIENT_LABELS[id] ?? id}
+              <Badge key={id} variant="outline" className="gap-1.5 pr-2.5 text-xs">
+                <ClientLogo clientId={id} className="size-3.5 rounded-sm" />
+                {CLIENT_LABELS[id]}
               </Badge>
             ))}
           </div>

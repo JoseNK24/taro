@@ -1,5 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ClientName } from "@/components/ClientLogo";
+import { filterSupportedClients } from "@/lib/clients";
 import type { DependencyStatus, DetectionResult } from "../../types";
 
 function syncLabel(client: DetectionResult): string {
@@ -27,9 +29,9 @@ export function McpClientsTable({
   loading,
 }: McpClientsTableProps) {
   const detectedCount = clients.filter((c) => c.detected).length;
-  const sortedClients = [...clients].sort((a, b) => {
+  const sortedClients = filterSupportedClients(clients).sort((a, b) => {
     if (a.detected !== b.detected) return a.detected ? -1 : 1;
-    return a.display_name.localeCompare(b.display_name, "en");
+    return 0;
   });
 
   return (
@@ -69,7 +71,10 @@ export function McpClientsTable({
                 className="border-b border-border/50 last:border-0"
               >
                 <td className="px-4 py-3 font-medium text-foreground">
-                  {client.display_name}
+                  <ClientName
+                    clientId={client.client_id}
+                    name={client.display_name}
+                  />
                 </td>
                 <td className="px-4 py-3 text-foreground">
                   {client.detected ? "Detected" : "Not detected"}

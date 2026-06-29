@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ClientName } from "@/components/ClientLogo";
 import type { HarnessInstanceRecord, HarnessSnapshot } from "../../types";
 import { HarnessProbeBadge } from "./HarnessProbeBadge";
 
@@ -26,7 +27,12 @@ export function HarnessInstanceCard({
       <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-medium text-foreground">{instance.display_name}</h3>
+            <ClientName
+              clientId=""
+              driverKind={instance.driver_kind}
+              name={instance.display_name}
+              className="font-medium text-foreground"
+            />
             <Badge variant="outline">{instance.driver_kind}</Badge>
             {instance.is_default_install_agent && (
               <Badge variant="secondary">Default install agent</Badge>

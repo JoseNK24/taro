@@ -10,10 +10,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClientName } from "@/components/ClientLogo";
 import {
   completeFirstRun,
   getFirstRunStatus,
 } from "../hooks/useTauri";
+import { filterSupportedClients } from "@/lib/clients";
 import type { FirstRunStatus } from "../types";
 
 interface FirstRunOnboardingProps {
@@ -58,7 +60,10 @@ export function FirstRunOnboarding({ onComplete }: FirstRunOnboardingProps) {
     );
   }
 
-  const detected = status.detected_clients.filter((c) => c.detected);
+  const detected = filterSupportedClients(status.detected_clients).filter(
+    (c) => c.detected,
+  );
+  const supportedClients = filterSupportedClients(status.detected_clients);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
@@ -89,12 +94,12 @@ export function FirstRunOnboarding({ onComplete }: FirstRunOnboardingProps) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              {status.detected_clients.map((c) => (
+              {supportedClients.map((c) => (
                 <div
                   key={c.client_id}
                   className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
                 >
-                  <span className="text-sm">{c.display_name}</span>
+                  <ClientName clientId={c.client_id} name={c.display_name} />
                   <Badge
                     variant={c.detected ? "default" : "outline"}
                     className={

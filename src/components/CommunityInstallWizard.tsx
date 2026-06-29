@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner } from "./Feedback";
+import { ClientName } from "@/components/ClientLogo";
 import {
   cancelCommunityInstall,
   confirmCommunityInstall,
@@ -24,6 +25,7 @@ import {
   saveSecret,
   startCommunityInstall,
 } from "../hooks/useTauri";
+import { filterSupportedClients } from "@/lib/clients";
 import type {
   CommunityInstallJob,
   DetectionResult,
@@ -77,7 +79,9 @@ export function CommunityInstallWizard({
     ]);
     setInstances(inst.filter((i) => i.enabled));
     setSnapshots(probes);
-    setClients(detected.filter((c) => c.detected && c.sync_supported));
+    setClients(
+      filterSupportedClients(detected).filter((c) => c.detected && c.sync_supported),
+    );
     setSelectedClients(
       new Set(
         detected
@@ -252,7 +256,12 @@ export function CommunityInstallWizard({
                       className="mt-1"
                     />
                     <div>
-                      <div className="text-sm font-medium">{inst.display_name}</div>
+                      <ClientName
+                        clientId=""
+                        driverKind={inst.driver_kind}
+                        name={inst.display_name}
+                        className="text-sm font-medium"
+                      />
                       <div className="text-xs text-muted-foreground">
                         {snap?.version ? `v${snap.version} · ` : ""}
                         {snap?.auth_status === "unauthenticated"
@@ -356,7 +365,11 @@ export function CommunityInstallWizard({
                         setSelectedClients(next);
                       }}
                     />
-                    <span className="text-sm">{c.display_name}</span>
+                    <ClientName
+                      clientId={c.client_id}
+                      name={c.display_name}
+                      className="text-sm"
+                    />
                   </label>
                 ))
               )}

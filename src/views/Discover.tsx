@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ClientName } from "@/components/ClientLogo";
 import { DiscoveredMcpCard } from "../components/DiscoveredMcpCard";
 import { DiscoverySearchBar } from "../components/DiscoverySearchBar";
 import { ErrorBanner, LoadingState } from "../components/Feedback";
@@ -35,6 +36,7 @@ import {
   searchDiscoveredMcps,
   syncDiscoveredCatalog,
 } from "../hooks/useTauri";
+import { filterSupportedClients } from "@/lib/clients";
 import type {
   DetectionResult,
   DiscoveredMcpEntry,
@@ -91,11 +93,11 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
       setCatalog(cat);
       setInstalledIds(new Set(installs.map((i) => i.integration_id)));
       setClients(
-        detected.filter((c) => c.detected && c.sync_supported),
+        filterSupportedClients(detected).filter((c) => c.detected && c.sync_supported),
       );
       setSelectedClients(
         new Set(
-          detected
+          filterSupportedClients(detected)
             .filter((c) => c.detected && c.sync_supported)
             .map((c) => c.client_id),
         ),
@@ -413,7 +415,11 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
                                 setSelectedClients(next);
                               }}
                             />
-                            <span className="text-sm">{c.display_name}</span>
+                            <ClientName
+                              clientId={c.client_id}
+                              name={c.display_name}
+                              className="text-sm"
+                            />
                           </label>
                         ))
                       )}

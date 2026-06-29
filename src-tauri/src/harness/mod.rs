@@ -17,7 +17,7 @@ use drivers::{
     claude_code::ClaudeCodeDriver, codex::CodexDriver, cursor::CursorDriver,
     opencode::OpencodeDriver, stub::StubDriver,
 };
-use util::app_exists;
+use util::which;
 
 pub fn all_drivers() -> Vec<Box<dyn HarnessDriver>> {
     vec![
@@ -25,8 +25,11 @@ pub fn all_drivers() -> Vec<Box<dyn HarnessDriver>> {
         Box::new(ClaudeCodeDriver),
         Box::new(CodexDriver),
         Box::new(OpencodeDriver),
-        Box::new(StubDriver::new("zed", "Zed", app_exists(&["/Applications/Zed.app"]))),
-        Box::new(StubDriver::new("goose", "Goose", app_exists(&["/Applications/Goose.app"]))),
+        Box::new(StubDriver::new(
+            "gemini",
+            "Gemini",
+            which("gemini").is_some(),
+        )),
     ]
 }
 

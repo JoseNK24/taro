@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ClientName } from "@/components/ClientLogo";
 import { ErrorBanner, LoadingState } from "../components/Feedback";
 import { PageHeader } from "../components/Sidebar";
+import { filterSupportedClients } from "@/lib/clients";
 import { detectClients, getDependencies } from "../hooks/useTauri";
 import type { DependencyStatus, DetectionResult } from "../types";
 
@@ -46,10 +48,11 @@ export function Clients() {
 
   if (loading) return <LoadingState />;
 
-  const detectedCount = clients.filter((c) => c.detected).length;
-  const sortedClients = [...clients].sort((a, b) => {
+  const supportedClients = filterSupportedClients(clients);
+  const detectedCount = supportedClients.filter((c) => c.detected).length;
+  const sortedClients = [...supportedClients].sort((a, b) => {
     if (a.detected !== b.detected) return a.detected ? -1 : 1;
-    return a.display_name.localeCompare(b.display_name, "en");
+    return 0;
   });
 
   return (
@@ -67,7 +70,7 @@ export function Clients() {
 
       <section className="mb-8">
         <h3 className="mb-3 text-sm font-medium text-foreground">
-          AI clients ({detectedCount} detected of {clients.length})
+          AI clients ({detectedCount} detected of {supportedClients.length})
         </h3>
         <Card className="overflow-hidden py-0">
           <table className="w-full text-sm">
@@ -87,7 +90,10 @@ export function Clients() {
                   className="border-b border-border/50 last:border-0"
                 >
                   <td className="px-4 py-3 font-medium text-foreground">
-                    {client.display_name}
+                    <ClientName
+                      clientId={client.client_id}
+                      name={client.display_name}
+                    />
                   </td>
                   <td className="px-4 py-3 text-foreground">
                     {client.detected ? "Detected" : "Not detected"}
