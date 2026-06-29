@@ -138,8 +138,15 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
+  /* Transparent so the native macOS vibrancy (frosted glass) shows through.
+     The main content pane paints its own opaque background for readability. */
+  html,
+  body,
+  #root {
+    background: transparent;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
   }
   html {
     @apply font-sans;

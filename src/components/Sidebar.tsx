@@ -17,7 +17,7 @@ interface SidebarProps {
 
 export function Sidebar({ active, onNavigate }: SidebarProps) {
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-sidebar-border bg-sidebar pt-10">
+    <aside className="flex w-52 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/40 pt-10">
       <div className="px-5 pb-6">
         <h1 className="text-lg font-semibold tracking-tight text-sidebar-foreground">
           Taro

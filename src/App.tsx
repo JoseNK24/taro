@@ -69,9 +69,11 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar active={section} onNavigate={setSection} />
-      <main className="min-h-0 flex-1 overflow-y-auto p-8">{renderView()}</main>
+      <main className="min-h-0 flex-1 overflow-y-auto bg-background p-8">
+        {renderView()}
+      </main>
     </div>
   );
 }

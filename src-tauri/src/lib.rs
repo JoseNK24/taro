@@ -35,6 +35,18 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            // Native macOS frosted-glass background so the sidebar can be translucent.
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                let _ = apply_vibrancy(
+                    &window,
+                    NSVisualEffectMaterial::Sidebar,
+                    None,
+                    None,
+                );
+            }
+
             let data_dir = app
                 .path()
                 .app_data_dir()
