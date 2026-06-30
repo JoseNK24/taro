@@ -187,18 +187,18 @@ export function Installed() {
   const showRemovalStarted = (message: string) => {
     setRemovalNotification({
       status: "pending",
-      title: "Eliminación en curso",
+      title: "Removal in progress",
       message,
     });
   };
 
   const showRemovalFinished = (
     result: RowResult,
-    successMessage = "Desinstalación completada y lista actualizada.",
+    successMessage = "Uninstall complete and list updated.",
   ) => {
     setRemovalNotification({
       status: result.success ? "success" : "error",
-      title: result.success ? "Eliminación completada" : "No se pudo eliminar",
+      title: result.success ? "Removal complete" : "Could not remove",
       message: result.success ? successMessage : result.message,
       clientResults: result.clientResults,
     });
@@ -228,9 +228,9 @@ export function Installed() {
     setPendingRemoval({
       kind: "integration",
       id,
-      title: "Eliminar integración",
+      title: "Remove integration",
       description:
-        "Se eliminará de los clientes configurados y desaparecerá de Installed si la operación se completa.",
+        "It will be removed from configured clients and disappear from Installed if the operation completes.",
     });
   };
 
@@ -240,9 +240,7 @@ export function Installed() {
       detail: "Removing MCP configuration from enabled clients",
     });
     setRowResult(id, null);
-    showRemovalStarted(
-      "Desinstalando la integración de los clientes configurados.",
-    );
+    showRemovalStarted("Uninstalling the integration from configured clients.");
     try {
       const result = await uninstallIntegration(id);
       await load(false);
@@ -272,10 +270,10 @@ export function Installed() {
     setPendingRemoval({
       kind: "server",
       server,
-      title: "Eliminar servidor MCP",
+      title: "Remove MCP server",
       description: server.managed
-        ? `Se eliminará '${server.server_id}' de ${server.client_name}.`
-        : `'${server.server_id}' no fue instalado por Taro. Se eliminará de ${server.client_name} igualmente.`,
+        ? `'${server.server_id}' will be removed from ${server.client_name}.`
+        : `'${server.server_id}' was not installed by Taro. It will still be removed from ${server.client_name}.`,
     });
   };
 
@@ -285,9 +283,7 @@ export function Installed() {
       message: "Removing…",
       detail: `Removing ${server.server_id} from ${server.client_name}`,
     });
-    showRemovalStarted(
-      `Eliminando '${server.server_id}' de ${server.client_name}.`,
-    );
+    showRemovalStarted(`Removing '${server.server_id}' from ${server.client_name}.`);
     try {
       const result = await forceRemoveMcpServer(
         server.client_id,
@@ -300,7 +296,7 @@ export function Installed() {
           message: result.message,
           clientResults: result.client_results,
         },
-        "Servidor eliminado y lista actualizada.",
+        "Server removed and list updated.",
       );
     } catch (e) {
       const message = String(e);
@@ -360,9 +356,9 @@ export function Installed() {
     setPendingRemoval({
       kind: "plugin",
       id,
-      title: "Eliminar plugin",
+      title: "Remove plugin",
       description:
-        "Se desinstalará de los clientes configurados y desaparecerá de Installed si la operación se completa.",
+        "It will be uninstalled from configured clients and disappear from Installed if the operation completes.",
     });
   };
 
@@ -372,7 +368,7 @@ export function Installed() {
       detail: "Uninstalling plugin from enabled clients",
     });
     setRowResult(id, null);
-    showRemovalStarted("Desinstalando el plugin de los clientes configurados.");
+    showRemovalStarted("Uninstalling the plugin from configured clients.");
     try {
       const result = await uninstallPlugin(id);
       await load(false);
@@ -472,7 +468,7 @@ export function Installed() {
               variant="ghost"
               size="icon-sm"
               onClick={() => setRemovalNotification(null)}
-              aria-label="Cerrar notificación"
+              aria-label="Close notification"
             >
               <XIcon />
             </Button>
@@ -505,14 +501,14 @@ export function Installed() {
               variant="outline"
               onClick={() => setPendingRemoval(null)}
             >
-              Cancelar
+              Cancel
             </Button>
             <Button
               type="button"
               variant="destructive"
               onClick={() => void confirmPendingRemoval()}
             >
-              Eliminar
+              Remove
             </Button>
           </DialogFooter>
         </DialogContent>

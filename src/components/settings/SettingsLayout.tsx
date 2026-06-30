@@ -4,6 +4,7 @@ import type { SettingsSection } from "../../types";
 
 const SETTINGS_NAV: { id: SettingsSection; label: string }[] = [
   { id: "general", label: "General" },
+  { id: "appearance", label: "Appearance" },
   { id: "connections", label: "Connections" },
   { id: "secrets", label: "Secrets" },
 ];

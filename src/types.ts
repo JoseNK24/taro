@@ -112,7 +112,7 @@ export type NavSection =
   | "health"
   | "settings";
 
-export type SettingsSection = "general" | "connections" | "secrets";
+export type SettingsSection = "general" | "appearance" | "connections" | "secrets";
 
 export type DiscoveredMcpEntry = {
   id: string;

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PageHeader } from "../components/Sidebar";
+import { AppearancePanel } from "../components/settings/AppearancePanel";
 import { ConnectionsPanel } from "../components/settings/ConnectionsPanel";
 import { GeneralPanel } from "../components/settings/GeneralPanel";
 import { SettingsLayout } from "../components/settings/SettingsLayout";
@@ -17,6 +18,7 @@ export function Settings() {
       />
       <SettingsLayout active={section} onNavigate={setSection}>
         {section === "general" && <GeneralPanel />}
+        {section === "appearance" && <AppearancePanel />}
         {section === "connections" && <ConnectionsPanel />}
         {section === "secrets" && <Secrets embedded />}
       </SettingsLayout>
