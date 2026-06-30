@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { CheckCircle2, Loader2, XCircle, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,6 +48,12 @@ type RowResult = {
   message: string;
   clientResults?: ClientOperationResult[];
 };
+type RemovalNotification = {
+  status: "pending" | "success" | "error";
+  title: string;
+  message: string;
+  clientResults?: ClientOperationResult[];
+};
 
 export function Installed() {
   const [tab, setTab] = useState<InstalledTab>("mcp");
@@ -65,10 +72,13 @@ export function Installed() {
   const [error, setError] = useState<string | null>(null);
   const [operations, setOperations] = useState<Record<string, RowOperation>>({});
   const [results, setResults] = useState<Record<string, RowResult>>({});
-  const [notice, setNotice] = useState<RowResult | null>(null);
+  const [removalNotification, setRemovalNotification] =
+    useState<RemovalNotification | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const [inst, cat, pluginInst, pluginCat, servers] = await Promise.all([
@@ -106,9 +116,14 @@ export function Installed() {
       );
       setCommunityNames(names);
     } catch (e) {
+      if (!showLoading) {
+        throw e;
+      }
       setError(String(e));
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -139,13 +154,32 @@ export function Installed() {
     });
   };
 
+  const showRemovalStarted = (message: string) => {
+    setRemovalNotification({
+      status: "pending",
+      title: "Eliminación en curso",
+      message,
+    });
+  };
+
+  const showRemovalFinished = (
+    result: RowResult,
+    successMessage = "Desinstalación completada y lista actualizada.",
+  ) => {
+    setRemovalNotification({
+      status: result.success ? "success" : "error",
+      title: result.success ? "Eliminación completada" : "No se pudo eliminar",
+      message: result.success ? successMessage : result.message,
+      clientResults: result.clientResults,
+    });
+  };
+
   const handleToggle = async (id: string, enabled: boolean) => {
     setOperation(id, {
       message: enabled ? "Enabling…" : "Disabling…",
       detail: "Syncing client configuration",
     });
     setRowResult(id, null);
-    setNotice(null);
     try {
       await toggleInstallation(id, enabled);
       await load();
@@ -173,22 +207,29 @@ export function Installed() {
       detail: "Removing MCP configuration from enabled clients",
     });
     setRowResult(id, null);
-    setNotice(null);
+    showRemovalStarted(
+      "Desinstalando la integración de los clientes configurados.",
+    );
     try {
       const result = await uninstallIntegration(id);
-      await load();
+      await load(false);
       setRowResult(id, {
         success: result.success,
         message: result.message,
         clientResults: result.client_results,
       });
-      setNotice({
+      showRemovalFinished({
         success: result.success,
         message: result.message,
         clientResults: result.client_results,
       });
     } catch (e) {
-      setError(String(e));
+      const message = String(e);
+      setError(message);
+      showRemovalFinished({
+        success: false,
+        message,
+      });
     } finally {
       setOperation(id, null);
     }
@@ -206,20 +247,30 @@ export function Installed() {
       message: "Removing…",
       detail: `Removing ${server.server_id} from ${server.client_name}`,
     });
-    setNotice(null);
+    showRemovalStarted(
+      `Eliminando '${server.server_id}' de ${server.client_name}.`,
+    );
     try {
       const result = await forceRemoveMcpServer(
         server.client_id,
         server.server_id,
       );
-      await load();
-      setNotice({
-        success: result.success,
-        message: result.message,
-        clientResults: result.client_results,
-      });
+      await load(false);
+      showRemovalFinished(
+        {
+          success: result.success,
+          message: result.message,
+          clientResults: result.client_results,
+        },
+        "Servidor eliminado y lista actualizada.",
+      );
     } catch (e) {
-      setError(String(e));
+      const message = String(e);
+      setError(message);
+      showRemovalFinished({
+        success: false,
+        message,
+      });
     } finally {
       setOperation(rowId, null);
     }
@@ -231,7 +282,6 @@ export function Installed() {
       detail: "Running a health check against this MCP server",
     });
     setRowResult(id, null);
-    setNotice(null);
     try {
       const result = await runHealthCheck(id);
       await load();
@@ -254,7 +304,6 @@ export function Installed() {
       detail: "Syncing plugin state with enabled clients",
     });
     setRowResult(id, null);
-    setNotice(null);
     try {
       await togglePluginInstallation(id, enabled);
       await load();
@@ -282,22 +331,27 @@ export function Installed() {
       detail: "Uninstalling plugin from enabled clients",
     });
     setRowResult(id, null);
-    setNotice(null);
+    showRemovalStarted("Desinstalando el plugin de los clientes configurados.");
     try {
       const result = await uninstallPlugin(id);
-      await load();
+      await load(false);
       setRowResult(id, {
         success: result.success,
         message: result.message,
         clientResults: result.client_results,
       });
-      setNotice({
+      showRemovalFinished({
         success: result.success,
         message: result.message,
         clientResults: result.client_results,
       });
     } catch (e) {
-      setError(String(e));
+      const message = String(e);
+      setError(message);
+      showRemovalFinished({
+        success: false,
+        message,
+      });
     } finally {
       setOperation(id, null);
     }
@@ -326,6 +380,54 @@ export function Installed() {
     </div>
   );
 
+  const renderRemovalNotification = (notification: RemovalNotification) => {
+    const icon: ReactNode =
+      notification.status === "pending" ? (
+        <Loader2 className="mt-0.5 size-4 animate-spin text-primary" />
+      ) : notification.status === "success" ? (
+        <CheckCircle2 className="mt-0.5 size-4 text-emerald-600" />
+      ) : (
+        <XCircle className="mt-0.5 size-4 text-destructive" />
+      );
+
+    return (
+      <div className="fixed right-5 top-5 z-50 w-[min(360px,calc(100vw-2.5rem))] rounded-lg border border-border bg-background p-4 shadow-lg">
+        <div className="flex items-start gap-3">
+          {icon}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">
+              {notification.title}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {notification.message}
+            </p>
+            {notification.clientResults &&
+              notification.clientResults.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {notification.clientResults.map((client) => (
+                    <li key={client.client_id}>
+                      {getClientLabel(client.client_id)}: {client.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </div>
+          {notification.status !== "pending" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setRemovalNotification(null)}
+              aria-label="Cerrar notificación"
+            >
+              <XIcon />
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <PageHeader
@@ -333,11 +435,7 @@ export function Installed() {
         description="Manage active integrations and plugins on your system."
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-      {notice && (
-        <div className="mb-4">
-          {renderResult(notice)}
-        </div>
-      )}
+      {removalNotification && renderRemovalNotification(removalNotification)}
 
       <div className="mb-6 flex w-fit gap-1 rounded-lg border border-border p-1">
         <Button
