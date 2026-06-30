@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sidebar } from "./components/Sidebar";
+import { WindowDragRegion } from "./components/WindowDragRegion";
 import { FirstRunOnboarding } from "./components/FirstRunOnboarding";
 import { Discover } from "./views/Discover";
 import { PluginsDiscover } from "./views/PluginsDiscover";
@@ -29,7 +30,8 @@ function App() {
 
   if (firstRun === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-background">
+        <WindowDragRegion variant="fixed" />
         <div className="flex flex-col items-center gap-3">
           <Skeleton className="h-4 w-32" />
           <p className="text-sm text-muted-foreground">Loading Taro…</p>
@@ -71,7 +73,8 @@ function App() {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar active={section} onNavigate={setSection} />
-      <main className="min-h-0 flex-1 overflow-y-auto bg-background p-8">
+      <main className="relative min-h-0 flex-1 overflow-y-auto bg-background p-8">
+        <WindowDragRegion />
         {renderView()}
       </main>
     </div>

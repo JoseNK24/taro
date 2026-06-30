@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientName } from "@/components/ClientLogo";
+import { WindowDragRegion } from "@/components/WindowDragRegion";
 import {
   completeFirstRun,
   getFirstRunStatus,
@@ -51,7 +52,8 @@ export function FirstRunOnboarding({ onComplete }: FirstRunOnboardingProps) {
 
   if (loading || !status) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-background">
+        <WindowDragRegion variant="fixed" />
         <div className="flex flex-col items-center gap-3">
           <Skeleton className="h-4 w-32" />
           <p className="text-sm text-muted-foreground">Preparing Taro…</p>
@@ -66,7 +68,8 @@ export function FirstRunOnboarding({ onComplete }: FirstRunOnboardingProps) {
   const supportedClients = filterSupportedClients(status.detected_clients);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+    <div className="relative flex h-screen items-center justify-center overflow-hidden bg-background p-6">
+      <WindowDragRegion variant="fixed" />
       <Card className="w-full max-w-lg">
         {step === "welcome" && (
           <>
