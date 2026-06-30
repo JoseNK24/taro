@@ -16,21 +16,17 @@ interface SidebarProps {
 
 export function Sidebar({ active, onNavigate }: SidebarProps) {
   return (
-    <aside className="relative flex w-52 shrink-0 flex-col border-r border-sidebar-border/70 bg-sidebar/55 pt-10 text-sidebar-foreground shadow-[inset_-1px_0_0_color-mix(in_oklch,var(--sidebar-foreground),transparent_94%)] backdrop-blur-2xl dark:border-sidebar-border/50 dark:bg-sidebar/90 dark:backdrop-blur-xl">
+    <aside className="relative flex w-52 shrink-0 flex-col border-r border-sidebar-border/70 bg-sidebar/85 pt-10 text-sidebar-foreground shadow-[inset_-1px_0_0_color-mix(in_oklch,var(--sidebar-foreground),transparent_94%)] backdrop-blur-xl dark:border-sidebar-border/50 dark:bg-sidebar/90 dark:backdrop-blur-xl">
       <div
         data-tauri-drag-region
-        className="px-5 pb-6 pl-[4.75rem]"
-      >
-        <h1
-          data-tauri-drag-region
-          className="text-lg font-semibold tracking-tight text-sidebar-foreground"
-        >
+        aria-hidden="true"
+        className="absolute top-0 right-0 left-0 h-10"
+      />
+      <div className="px-5 pb-6">
+        <h1 className="text-lg font-semibold tracking-tight text-sidebar-foreground">
           Taro
         </h1>
-        <p
-          data-tauri-drag-region
-          className="mt-0.5 text-xs text-sidebar-foreground/60"
-        >
+        <p className="mt-0.5 text-xs text-sidebar-foreground/60">
           MCP & Plugins
         </p>
       </div>
