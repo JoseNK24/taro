@@ -146,10 +146,90 @@ impl Database {
                 agent_log TEXT,
                 FOREIGN KEY (installation_id) REFERENCES installations(id) ON DELETE CASCADE
             );
+
+            -- Ownership annotation: the exact (client, server_id) entries Taro
+            -- wrote. Source of truth for uninstall, so we never re-derive a name
+            -- and never touch a server we did not install.
+            CREATE TABLE IF NOT EXISTS managed_servers (
+                client_id TEXT NOT NULL,
+                server_id TEXT NOT NULL,
+                installation_id TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (client_id, server_id)
+            );
             ",
         )?;
         self.migrate_schema()?;
+        self.backfill_managed_servers()?;
         Ok(())
+    }
+
+    /// Seed `managed_servers` from installs that predate the table, using the
+    /// id scheme each install actually wrote, so existing integrations stay
+    /// removable after we stop prefixing new names.
+    fn backfill_managed_servers(&self) -> DbResult<()> {
+        if self.get_setting("managed_servers_backfilled")?.as_deref() == Some("true") {
+            return Ok(());
+        }
+        for inst in self.list_installations()? {
+            let server_id = if inst.source == "community" {
+                match self.get_community_install_meta(&inst.id)? {
+                    Some(meta) => meta.resolved_server.id,
+                    None => continue,
+                }
+            } else {
+                format!("taro-{}", inst.integration_id)
+            };
+            for target in self.list_client_targets(&inst.id)? {
+                self.mark_managed_server(&target.client_id, &server_id, Some(&inst.id))?;
+            }
+        }
+        self.set_setting("managed_servers_backfilled", "true")
+    }
+
+    pub fn mark_managed_server(
+        &self,
+        client_id: &str,
+        server_id: &str,
+        installation_id: Option<&str>,
+    ) -> DbResult<()> {
+        self.conn.execute(
+            "INSERT INTO managed_servers (client_id, server_id, installation_id)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(client_id, server_id) DO UPDATE SET installation_id = excluded.installation_id",
+            params![client_id, server_id, installation_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn unmark_managed_server(&self, client_id: &str, server_id: &str) -> DbResult<()> {
+        self.conn.execute(
+            "DELETE FROM managed_servers WHERE client_id = ?1 AND server_id = ?2",
+            params![client_id, server_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn is_managed_server(&self, client_id: &str, server_id: &str) -> DbResult<bool> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) > 0 FROM managed_servers WHERE client_id = ?1 AND server_id = ?2",
+            params![client_id, server_id],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// (client_id, server_id) pairs Taro wrote for a given installation.
+    pub fn managed_servers_for_installation(
+        &self,
+        installation_id: &str,
+    ) -> DbResult<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT client_id, server_id FROM managed_servers WHERE installation_id = ?1",
+        )?;
+        let rows = stmt.query_map(params![installation_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
     }
 
     fn migrate_schema(&self) -> DbResult<()> {
@@ -959,4 +1039,32 @@ fn build_fts_query(query: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" OR ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn managed_servers_roundtrip() {
+        let path = std::env::temp_dir().join(format!("taro-managed-{}.db", uuid::Uuid::new_v4()));
+        let db = Database::open(&path).unwrap();
+
+        assert!(!db.is_managed_server("claude-code", "filesystem").unwrap());
+
+        db.mark_managed_server("claude-code", "filesystem", Some("inst-1"))
+            .unwrap();
+        db.mark_managed_server("cursor", "filesystem", Some("inst-1"))
+            .unwrap();
+
+        assert!(db.is_managed_server("claude-code", "filesystem").unwrap());
+        let pairs = db.managed_servers_for_installation("inst-1").unwrap();
+        assert_eq!(pairs.len(), 2);
+
+        db.unmark_managed_server("claude-code", "filesystem").unwrap();
+        assert!(!db.is_managed_server("claude-code", "filesystem").unwrap());
+        assert_eq!(db.managed_servers_for_installation("inst-1").unwrap().len(), 1);
+
+        let _ = std::fs::remove_file(path);
+    }
 }

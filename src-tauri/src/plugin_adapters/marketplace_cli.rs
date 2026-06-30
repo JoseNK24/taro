@@ -13,6 +13,17 @@ fn cli_command(client_id: &str) -> Result<&'static str, String> {
     }
 }
 
+/// Substrings a CLI prints when the requested state already holds. We treat
+/// these as success so install is safe to re-run (already installed) and
+/// uninstall is safe when the plugin is already gone — both idempotent.
+fn is_benign_noop(text: &str) -> bool {
+    let t = text.to_lowercase();
+    t.contains("already")
+        || t.contains("not installed")
+        || t.contains("not found")
+        || t.contains("no such")
+}
+
 fn run_cli(client_id: &str, args: &[&str]) -> Result<(), String> {
     let cmd = cli_command(client_id)?;
     if !command_exists(cmd) {
@@ -31,6 +42,9 @@ fn run_cli(client_id: &str, args: &[&str]) -> Result<(), String> {
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
+        if is_benign_noop(&stderr) || is_benign_noop(&stdout) {
+            return Ok(());
+        }
         Err(format!(
             "Comando falló ({cmd} {}): {}{}",
             args.join(" "),

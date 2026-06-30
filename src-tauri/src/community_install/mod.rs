@@ -384,18 +384,30 @@ pub fn validate_resolved_config(config: &ResolvedMcpConfig) -> Result<ResolvedMc
     Ok(validated)
 }
 
+/// Stable server id for a community MCP. Install and uninstall MUST derive the
+/// id through this single function so the name written to client configs is the
+/// exact one removed later (no per-path recomputation that could drift).
+pub fn community_server_id(discovered_mcp_id: &str) -> String {
+    // Keep the MCP's own owner/repo identity (no Taro prefix); only swap chars
+    // that aren't safe as a config key. Ownership lives in managed_servers.
+    discovered_mcp_id
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
 pub fn resolved_to_mcp_server(
     discovered_mcp_id: &str,
     config: &ResolvedMcpConfig,
     secrets_map: &HashMap<String, String>,
 ) -> McpServer {
-    let id = format!(
-        "taro-community-{}",
-        discovered_mcp_id
-            .chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
-            .collect::<String>()
-    );
+    let id = community_server_id(discovered_mcp_id);
     McpServer {
         id,
         command: config.command.clone(),
@@ -475,22 +487,8 @@ pub fn confirm_community_install(
 
     update_job_status(job_manager, job_id, "installing");
 
-    sync_to_clients(
-        &resolved_to_mcp_server(&job.discovered_mcp_id, &validated, &secrets_map),
-        &client_ids,
-        false,
-    )?;
-
-    for (key, value) in &secrets_map {
-        secrets::set_secret(&integration_id, key, value).map_err(|e| e.to_string())?;
-    }
-
-    let probe = probe_server(&resolved_to_mcp_server(
-        &job.discovered_mcp_id,
-        &validated,
-        &secrets_map,
-    ));
-    let status = if probe.ok { "connected" } else { "error" };
+    let server = resolved_to_mcp_server(&job.discovered_mcp_id, &validated, &secrets_map);
+    crate::install::guard_no_clobber(db, &server.id, &client_ids)?;
 
     let existing = db
         .get_installation_by_integration(&integration_id)
@@ -499,6 +497,16 @@ pub fn confirm_community_install(
         .as_ref()
         .map(|i| i.id.clone())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    crate::install::supersede_old_entries(db, &installation_id, &server.id)?;
+    sync_to_clients(&server, &client_ids, false)?;
+
+    for (key, value) in &secrets_map {
+        secrets::set_secret(&integration_id, key, value).map_err(|e| e.to_string())?;
+    }
+
+    let probe = probe_server(&server);
+    let status = if probe.ok { "connected" } else { "error" };
 
     db.upsert_installation_with_source(
         &installation_id,
@@ -514,6 +522,7 @@ pub fn confirm_community_install(
         db.set_client_target(&installation_id, client_id, true)
             .map_err(|e| e.to_string())?;
     }
+    crate::install::mark_managed(db, &server.id, &client_ids, &installation_id)?;
 
     db.insert_health_check(
         &installation_id,
@@ -625,4 +634,28 @@ fn github_readme_raw_url(github_url: &str) -> Option<String> {
     Some(format!(
         "https://raw.githubusercontent.com/{user}/{repo}/HEAD/README.md"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Orphan guard: the id written at install time must equal the id the
+    // uninstall fallback rebuilds from the integration_id, or removal misses.
+    // Also asserts the MCP's own name is preserved (no Taro prefix).
+    #[test]
+    fn install_and_uninstall_fallback_ids_match() {
+        let discovered_id = "DeusData/codebase-memory-mcp";
+        let install_id = community_server_id(discovered_id);
+
+        let integration_id = format!("community-{discovered_id}");
+        let rebuilt = integration_id
+            .strip_prefix("community-")
+            .map(community_server_id)
+            .unwrap();
+
+        assert_eq!(install_id, rebuilt);
+        assert_eq!(install_id, "DeusData-codebase-memory-mcp");
+        assert!(!install_id.starts_with("taro-"));
+    }
 }

@@ -23,6 +23,7 @@ pub fn scan_existing_servers() -> Vec<ExistingServerInfo> {
                     client_name: adapter.display_name().to_string(),
                     server_id: server.id,
                     command: server.command,
+                    managed: false,
                 });
             }
         }
@@ -114,11 +115,21 @@ pub fn build_server_for_integration(
     }
 
     Ok(McpServer {
-        id: format!("taro-{integration_id}"),
+        // Use the integration's own name unchanged; ownership is tracked in the
+        // managed_servers table, not by branding the id with a prefix.
+        id: integration_id.to_string(),
         command: entry.server.command.clone(),
         args,
         env,
     })
+}
+
+/// Whether `client_id`'s config currently contains a server with `server_id`.
+pub fn client_has_server(client_id: &str, server_id: &str) -> bool {
+    get_adapter(client_id)
+        .and_then(|a| a.read_servers().ok())
+        .map(|servers| servers.iter().any(|s| s.id == server_id))
+        .unwrap_or(false)
 }
 
 pub fn sync_to_clients(
@@ -155,13 +166,35 @@ pub fn remove_from_clients(
                 };
             };
 
-            match adapter.remove_server(&server.id) {
-                Ok(true) => ClientOperationResult {
+            let existed = match adapter.remove_server(&server.id) {
+                Ok(existed) => existed,
+                Err(e) => {
+                    return ClientOperationResult {
+                        client_id: client_id.clone(),
+                        success: false,
+                        message: e.to_string(),
+                    };
+                }
+            };
+
+            // Re-read the written config and confirm the entry is actually gone,
+            // so we never report a successful uninstall while an orphan remains.
+            match adapter.read_servers() {
+                Ok(servers) if servers.iter().any(|s| s.id == server.id) => ClientOperationResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message: format!(
+                        "'{}' still present in {} after removal",
+                        server.id,
+                        adapter.display_name()
+                    ),
+                },
+                Ok(_) if existed => ClientOperationResult {
                     client_id: client_id.clone(),
                     success: true,
-                    message: format!("Removed from {}", adapter.display_name()),
+                    message: format!("Removed from {} (verified)", adapter.display_name()),
                 },
-                Ok(false) => ClientOperationResult {
+                Ok(_) => ClientOperationResult {
                     client_id: client_id.clone(),
                     success: true,
                     message: format!("Already absent from {}", adapter.display_name()),
@@ -169,7 +202,10 @@ pub fn remove_from_clients(
                 Err(e) => ClientOperationResult {
                     client_id: client_id.clone(),
                     success: false,
-                    message: e.to_string(),
+                    message: format!(
+                        "Could not verify removal from {}: {e}",
+                        adapter.display_name()
+                    ),
                 },
             }
         })

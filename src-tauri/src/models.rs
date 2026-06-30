@@ -194,6 +194,9 @@ pub struct ExistingServerInfo {
     pub client_name: String,
     pub server_id: String,
     pub command: String,
+    /// True when Taro installed this server (per the managed_servers annotation).
+    #[serde(default)]
+    pub managed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

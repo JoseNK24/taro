@@ -112,8 +112,57 @@ pub fn detect_clients() -> Result<Vec<DetectionResult>, String> {
 }
 
 #[tauri::command]
-pub fn scan_existing_mcp_servers() -> Result<Vec<ExistingServerInfo>, String> {
-    Ok(scan_existing_servers())
+pub fn scan_existing_mcp_servers(
+    state: State<AppState>,
+) -> Result<Vec<ExistingServerInfo>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let mut servers = scan_existing_servers();
+    for server in &mut servers {
+        server.managed = db
+            .is_managed_server(&server.client_id, &server.server_id)
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(servers)
+}
+
+/// Remove any MCP server from a client config, including ones Taro did not
+/// install. The UI must confirm with the user first; this performs the deletion
+/// and verifies the entry is actually gone.
+#[tauri::command]
+pub fn force_remove_mcp_server(
+    state: State<AppState>,
+    client_id: String,
+    server_id: String,
+) -> Result<UninstallResult, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let server = crate::models::McpServer {
+        id: server_id.clone(),
+        command: String::new(),
+        args: vec![],
+        env: Default::default(),
+    };
+    let client_results =
+        crate::detect::remove_from_clients(&server, std::slice::from_ref(&client_id));
+    let success = client_results.iter().all(|r| r.success);
+    if success {
+        db.unmark_managed_server(&client_id, &server_id)
+            .map_err(|e| e.to_string())?;
+    }
+    let message = if success {
+        format!("'{server_id}' eliminado y verificado en {client_id}")
+    } else {
+        client_results
+            .iter()
+            .filter(|r| !r.success)
+            .map(|r| r.message.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    Ok(UninstallResult {
+        success,
+        message,
+        client_results,
+    })
 }
 
 #[tauri::command]

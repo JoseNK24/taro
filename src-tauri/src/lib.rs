@@ -84,6 +84,7 @@ pub fn run() {
             commands::set_client_target,
             commands::detect_clients,
             commands::scan_existing_mcp_servers,
+            commands::force_remove_mcp_server,
             commands::get_dependencies,
             commands::get_first_run_status,
             commands::complete_first_run,

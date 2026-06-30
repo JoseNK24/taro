@@ -67,15 +67,18 @@ export type MissingDependency = {
   installable: boolean;
 };
 
+export type ExistingServer = {
+  client_id: string;
+  client_name: string;
+  server_id: string;
+  command: string;
+  managed: boolean;
+};
+
 export type FirstRunStatus = {
   completed: boolean;
   detected_clients: DetectionResult[];
-  existing_servers: Array<{
-    client_id: string;
-    client_name: string;
-    server_id: string;
-    command: string;
-  }>;
+  existing_servers: ExistingServer[];
 };
 
 export type InstallResult = {

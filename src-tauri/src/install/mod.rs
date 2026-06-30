@@ -14,6 +14,72 @@ pub struct InstallEngine<'a> {
     pub catalog: &'a Catalog,
 }
 
+/// Refuse to install when a same-named server already exists in a client and
+/// Taro did not put it there, so we never overwrite a user's own MCP. (Ownership
+/// is read from the managed_servers annotation, never from the name.)
+pub fn guard_no_clobber(
+    db: &Database,
+    server_id: &str,
+    client_ids: &[String],
+) -> Result<(), String> {
+    for client_id in client_ids {
+        if crate::detect::client_has_server(client_id, server_id)
+            && !db
+                .is_managed_server(client_id, server_id)
+                .map_err(|e| e.to_string())?
+        {
+            return Err(format!(
+                "Ya existe un MCP llamado '{server_id}' en {client_id} que Taro no instaló. \
+                 Elimínalo o renómbralo antes de instalar."
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Reinstalling: drop any previously-written entry for this install whose id
+/// differs from the new one (e.g. an old prefixed name) so we don't leave a
+/// duplicate behind after the naming scheme changed.
+pub fn supersede_old_entries(
+    db: &Database,
+    installation_id: &str,
+    new_server_id: &str,
+) -> Result<(), String> {
+    for (client_id, old_id) in db
+        .managed_servers_for_installation(installation_id)
+        .map_err(|e| e.to_string())?
+    {
+        if old_id != new_server_id {
+            let _ = remove_from_clients(
+                &McpServer {
+                    id: old_id.clone(),
+                    command: String::new(),
+                    args: vec![],
+                    env: Default::default(),
+                },
+                std::slice::from_ref(&client_id),
+            );
+            db.unmark_managed_server(&client_id, &old_id)
+                .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Record (client, server_id) as Taro-managed for every target client.
+pub fn mark_managed(
+    db: &Database,
+    server_id: &str,
+    client_ids: &[String],
+    installation_id: &str,
+) -> Result<(), String> {
+    for client_id in client_ids {
+        db.mark_managed_server(client_id, server_id, Some(installation_id))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn server_for_uninstall(
     db: &Database,
     catalog: &Catalog,
@@ -26,11 +92,17 @@ fn server_for_uninstall(
             .get_community_install_meta(installation_id)
             .map_err(|e| e.to_string())?
             .map(|meta| meta.resolved_server)
-            .unwrap_or(crate::models::McpServer {
-                id: format!("taro-{integration_id}"),
-                command: String::new(),
-                args: vec![],
-                env: Default::default(),
+            .unwrap_or_else(|| {
+                // No persisted meta: rebuild the id with the *same* helper used at
+                // install time so the name matches and removal actually hits it.
+                let discovered_id =
+                    integration_id.strip_prefix("community-").unwrap_or(integration_id);
+                crate::models::McpServer {
+                    id: crate::community_install::community_server_id(discovered_id),
+                    command: String::new(),
+                    args: vec![],
+                    env: Default::default(),
+                }
             }));
     }
 
@@ -44,6 +116,23 @@ fn server_for_uninstall(
     )
 }
 
+/// Clone `base` but use the id Taro actually wrote for this client (from the
+/// managed_servers annotation) so existing installs keep matching their config
+/// entry even after the naming scheme changed.
+fn server_for_client(base: &McpServer, managed: &[(String, String)], client_id: &str) -> McpServer {
+    let id = managed
+        .iter()
+        .find(|(c, _)| c == client_id)
+        .map(|(_, id)| id.clone())
+        .unwrap_or_else(|| base.id.clone());
+    McpServer {
+        id,
+        command: base.command.clone(),
+        args: base.args.clone(),
+        env: base.env.clone(),
+    }
+}
+
 pub fn install_resolved_server(
     db: &Database,
     server: &McpServer,
@@ -55,10 +144,7 @@ pub fn install_resolved_server(
         return Err("Select at least one client".to_string());
     }
 
-    sync_to_clients(server, client_ids, false)?;
-
-    let probe = probe_server(server);
-    let status = if probe.ok { "connected" } else { "error" };
+    guard_no_clobber(db, &server.id, client_ids)?;
 
     let existing = db
         .get_installation_by_integration(integration_id)
@@ -67,6 +153,12 @@ pub fn install_resolved_server(
         .as_ref()
         .map(|i| i.id.clone())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    supersede_old_entries(db, &installation_id, &server.id)?;
+    sync_to_clients(server, client_ids, false)?;
+
+    let probe = probe_server(server);
+    let status = if probe.ok { "connected" } else { "error" };
 
     db.upsert_installation_with_source(
         &installation_id,
@@ -82,6 +174,7 @@ pub fn install_resolved_server(
         db.set_client_target(&installation_id, client_id, true)
             .map_err(|e| e.to_string())?;
     }
+    mark_managed(db, &server.id, client_ids, &installation_id)?;
 
     db.insert_health_check(
         &installation_id,
@@ -178,13 +271,20 @@ impl<'a> InstallEngine<'a> {
             .get_installation(installation_id)
             .map_err(|e| e.to_string())?;
 
-        let server = server_for_uninstall(
+        // The id Taro actually wrote is read from the managed_servers annotation,
+        // not re-derived from the name. Fall back to the derived id only for
+        // installs that predate the annotation and somehow missed backfill.
+        let fallback = server_for_uninstall(
             self.db,
             self.catalog,
             installation_id,
             &installation.integration_id,
             &installation.source,
         )?;
+        let managed = self
+            .db
+            .managed_servers_for_installation(installation_id)
+            .map_err(|e| e.to_string())?;
 
         let targets = self
             .db
@@ -196,7 +296,27 @@ impl<'a> InstallEngine<'a> {
             .map(|t| t.client_id.clone())
             .collect();
 
-        let client_results = remove_from_clients(&server, &client_ids);
+        let mut client_results = Vec::new();
+        for client_id in &client_ids {
+            let server_id = managed
+                .iter()
+                .find(|(c, _)| c == client_id)
+                .map(|(_, id)| id.clone())
+                .unwrap_or_else(|| fallback.id.clone());
+            let server = McpServer {
+                id: server_id.clone(),
+                command: String::new(),
+                args: vec![],
+                env: Default::default(),
+            };
+            let mut results = remove_from_clients(&server, std::slice::from_ref(client_id));
+            if results.iter().all(|r| r.success) {
+                self.db
+                    .unmark_managed_server(client_id, &server_id)
+                    .map_err(|e| e.to_string())?;
+            }
+            client_results.append(&mut results);
+        }
         let failures: Vec<_> = client_results.iter().filter(|r| !r.success).collect();
 
         if !failures.is_empty() {
@@ -224,9 +344,9 @@ impl<'a> InstallEngine<'a> {
         let message = if client_ids.is_empty() {
             "Integration removed from Taro".to_string()
         } else if already_absent {
-            "Integration removed; some clients were already clean".to_string()
+            "Integration removed and verified absent (some clients were already clean)".to_string()
         } else {
-            "Integration removed successfully".to_string()
+            "Integration removed and verified absent from all clients".to_string()
         };
         Ok(UninstallResult {
             success: true,
@@ -241,7 +361,11 @@ impl<'a> InstallEngine<'a> {
             .get_installation(installation_id)
             .map_err(|e| e.to_string())?;
 
-        let server = build_server_for_integration(self.catalog, &installation.integration_id)?;
+        let base = build_server_for_integration(self.catalog, &installation.integration_id)?;
+        let managed = self
+            .db
+            .managed_servers_for_installation(installation_id)
+            .map_err(|e| e.to_string())?;
 
         let targets = self
             .db
@@ -253,7 +377,15 @@ impl<'a> InstallEngine<'a> {
             .map(|t| t.client_id.clone())
             .collect();
 
-        sync_to_clients(&server, &client_ids, !enabled)?;
+        for client_id in &client_ids {
+            let server = server_for_client(&base, &managed, client_id);
+            sync_to_clients(&server, std::slice::from_ref(client_id), !enabled)?;
+            if enabled {
+                self.db
+                    .mark_managed_server(client_id, &server.id, Some(installation_id))
+                    .map_err(|e| e.to_string())?;
+            }
+        }
 
         self.db
             .set_installation_enabled(installation_id, enabled)
@@ -277,14 +409,21 @@ impl<'a> InstallEngine<'a> {
             return Ok(());
         }
 
-        let server = build_server_for_integration(self.catalog, &installation.integration_id)?;
+        let base = build_server_for_integration(self.catalog, &installation.integration_id)?;
+        let managed = self
+            .db
+            .managed_servers_for_installation(installation_id)
+            .map_err(|e| e.to_string())?;
         let targets = self
             .db
             .list_enabled_client_targets(installation_id)
             .map_err(|e| e.to_string())?;
         let client_ids: Vec<String> = targets.iter().map(|t| t.client_id.clone()).collect();
 
-        sync_to_clients(&server, &client_ids, false)?;
+        for client_id in &client_ids {
+            let server = server_for_client(&base, &managed, client_id);
+            sync_to_clients(&server, std::slice::from_ref(client_id), false)?;
+        }
         Ok(())
     }
 

@@ -18,7 +18,9 @@ import {
   getInstallations,
   getPluginCatalog,
   getPluginInstallations,
+  forceRemoveMcpServer,
   runHealthCheck,
+  scanMcpServers,
   toggleInstallation,
   togglePluginInstallation,
   uninstallIntegration,
@@ -28,6 +30,7 @@ import { getClientLabel } from "../lib/clients";
 import type {
   ClientOperationResult,
   CommunityInstallMeta,
+  ExistingServer,
   InstallationRecord,
   IntegrationCatalogEntry,
   PluginInstallationRecord,
@@ -57,6 +60,7 @@ export function Installed() {
     Record<string, CommunityInstallMeta>
   >({});
   const [communityNames, setCommunityNames] = useState<Record<string, string>>({});
+  const [allServers, setAllServers] = useState<ExistingServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [operations, setOperations] = useState<Record<string, RowOperation>>({});
@@ -67,16 +71,18 @@ export function Installed() {
     setLoading(true);
     setError(null);
     try {
-      const [inst, cat, pluginInst, pluginCat] = await Promise.all([
+      const [inst, cat, pluginInst, pluginCat, servers] = await Promise.all([
         getInstallations(),
         getCatalog(),
         getPluginInstallations(),
         getPluginCatalog(),
+        scanMcpServers(),
       ]);
       setInstallations(inst);
       setCatalog(cat);
       setPluginInstallations(pluginInst);
       setPluginCatalog(pluginCat);
+      setAllServers(servers);
       const metaEntries = await Promise.all(
         inst
           .filter((i) => i.source === "community")
@@ -185,6 +191,37 @@ export function Installed() {
       setError(String(e));
     } finally {
       setOperation(id, null);
+    }
+  };
+
+  const handleForceRemove = async (server: ExistingServer) => {
+    const rowId = `${server.client_id}:${server.server_id}`;
+    const warning = server.managed
+      ? `Remove '${server.server_id}' from ${server.client_name}?`
+      : `'${server.server_id}' was not installed by Taro. Remove it from ${server.client_name} anyway?`;
+    if (!confirm(warning)) {
+      return;
+    }
+    setOperation(rowId, {
+      message: "Removing…",
+      detail: `Removing ${server.server_id} from ${server.client_name}`,
+    });
+    setNotice(null);
+    try {
+      const result = await forceRemoveMcpServer(
+        server.client_id,
+        server.server_id,
+      );
+      await load();
+      setNotice({
+        success: result.success,
+        message: result.message,
+        clientResults: result.client_results,
+      });
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setOperation(rowId, null);
     }
   };
 
@@ -419,6 +456,63 @@ export function Installed() {
                   </Card>
                 );
               })}
+            </div>
+          )}
+
+          {allServers.length > 0 && (
+            <div className="mt-8">
+              <h3 className="mb-1 text-sm font-medium text-foreground">
+                MCP servers on this system
+              </h3>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Every MCP server found in your clients' configs. You can remove
+                any of them, including servers Taro did not install.
+              </p>
+              <div className="space-y-2">
+                {allServers.map((server) => {
+                  const rowId = `${server.client_id}:${server.server_id}`;
+                  const operation = operations[rowId];
+                  return (
+                    <Card key={rowId}>
+                      <CardContent className="flex items-center gap-4 py-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <h4 className="truncate font-medium text-foreground">
+                              {server.server_id}
+                            </h4>
+                            <Badge
+                              variant={server.managed ? "default" : "outline"}
+                            >
+                              {server.managed ? "Installed by Taro" : "External"}
+                            </Badge>
+                          </div>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {getClientLabel(server.client_id)} · {server.command}
+                          </p>
+                          {operation && (
+                            <OperationStatus
+                              className="mt-2"
+                              message={operation.message}
+                              detail={operation.detail}
+                            />
+                          )}
+                        </div>
+                        <LoadingButton
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          loading={Boolean(operation)}
+                          loadingLabel="Removing…"
+                          disabled={Boolean(operation)}
+                          onClick={() => handleForceRemove(server)}
+                        >
+                          Remove
+                        </LoadingButton>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           )}
         </>

@@ -12,6 +12,7 @@ import type {
   DiscoverySort,
   DiscoveryStatus,
   DiscoverySyncStats,
+  ExistingServer,
   FirstRunStatus,
   HarnessDriverInfo,
   HarnessInstanceRecord,
@@ -52,6 +53,17 @@ export async function uninstallIntegration(
   installationId: string,
 ): Promise<UninstallResult> {
   return invoke("uninstall_integration", { installationId });
+}
+
+export async function scanMcpServers(): Promise<ExistingServer[]> {
+  return invoke("scan_existing_mcp_servers");
+}
+
+export async function forceRemoveMcpServer(
+  clientId: string,
+  serverId: string,
+): Promise<UninstallResult> {
+  return invoke("force_remove_mcp_server", { clientId, serverId });
 }
 
 export async function toggleInstallation(
