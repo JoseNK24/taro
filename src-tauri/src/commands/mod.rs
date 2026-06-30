@@ -77,6 +77,17 @@ pub fn uninstall_integration(
 }
 
 #[tauri::command]
+pub fn uninstall_integration_from_clients(
+    state: State<AppState>,
+    installation_id: String,
+    client_ids: Vec<String>,
+) -> Result<UninstallResult, String> {
+    with_db(&state, |db, catalog| {
+        InstallEngine { db, catalog }.uninstall_from_clients(&installation_id, client_ids)
+    })
+}
+
+#[tauri::command]
 pub fn toggle_installation(
     state: State<AppState>,
     installation_id: String,
@@ -437,6 +448,17 @@ pub fn uninstall_plugin(
 ) -> Result<UninstallResult, String> {
     with_plugin_db(&state, |db, catalog| {
         PluginInstallEngine { db, catalog }.uninstall(&installation_id)
+    })
+}
+
+#[tauri::command]
+pub fn uninstall_plugin_from_clients(
+    state: State<AppState>,
+    installation_id: String,
+    client_ids: Vec<String>,
+) -> Result<UninstallResult, String> {
+    with_plugin_db(&state, |db, catalog| {
+        PluginInstallEngine { db, catalog }.uninstall_from_clients(&installation_id, client_ids)
     })
 }
 

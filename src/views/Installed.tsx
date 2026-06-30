@@ -3,6 +3,7 @@ import { CheckCircle2, Loader2, XCircle, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -22,26 +23,30 @@ import {
 import { PageHeader } from "../components/Sidebar";
 import {
   getCatalog,
+  getClientTargets,
   getCommunityInstallMeta,
   getDiscoveredMcp,
   getInstallations,
   getPluginCatalog,
+  getPluginClientTargets,
   getPluginInstallations,
   forceRemoveMcpServer,
   runHealthCheck,
   scanMcpServers,
   toggleInstallation,
   togglePluginInstallation,
-  uninstallIntegration,
-  uninstallPlugin,
+  uninstallIntegrationFromClients,
+  uninstallPluginFromClients,
 } from "../hooks/useTauri";
 import { getClientLabel } from "../lib/clients";
 import type {
+  ClientTargetRecord,
   ClientOperationResult,
   CommunityInstallMeta,
   ExistingServer,
   InstallationRecord,
   IntegrationCatalogEntry,
+  PluginClientTargetRecord,
   PluginInstallationRecord,
   PluginCatalogEntry,
 } from "../types";
@@ -61,6 +66,10 @@ type RemovalNotification = {
   title: string;
   message: string;
   clientResults?: ClientOperationResult[];
+};
+type RemovalClient = {
+  client_id: string;
+  enabled: boolean;
 };
 type PendingRemoval =
   | {
@@ -104,6 +113,11 @@ export function Installed() {
   const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(
     null,
   );
+  const [removalClients, setRemovalClients] = useState<RemovalClient[]>([]);
+  const [selectedRemovalClients, setSelectedRemovalClients] = useState<
+    string[]
+  >([]);
+  const [removalTargetsLoading, setRemovalTargetsLoading] = useState(false);
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -204,6 +218,51 @@ export function Installed() {
     });
   };
 
+  const resetPendingRemoval = () => {
+    setPendingRemoval(null);
+    setRemovalClients([]);
+    setSelectedRemovalClients([]);
+    setRemovalTargetsLoading(false);
+  };
+
+  const prepareRemovalClients = async (
+    loadTargets: () => Promise<Array<ClientTargetRecord | PluginClientTargetRecord>>,
+  ) => {
+    setRemovalTargetsLoading(true);
+    setRemovalClients([]);
+    setSelectedRemovalClients([]);
+    try {
+      const targets = await loadTargets();
+      const enabledTargets = targets.filter((target) => target.enabled);
+      setRemovalClients(
+        enabledTargets.map((target) => ({
+          client_id: target.client_id,
+          enabled: target.enabled,
+        })),
+      );
+      setSelectedRemovalClients(
+        enabledTargets.map((target) => target.client_id),
+      );
+    } catch (e) {
+      const message = String(e);
+      setError(message);
+      showRemovalFinished({
+        success: false,
+        message,
+      });
+    } finally {
+      setRemovalTargetsLoading(false);
+    }
+  };
+
+  const toggleRemovalClient = (clientId: string, checked: boolean) => {
+    setSelectedRemovalClients((prev) =>
+      checked
+        ? Array.from(new Set([...prev, clientId]))
+        : prev.filter((id) => id !== clientId),
+    );
+  };
+
   const handleToggle = async (id: string, enabled: boolean) => {
     setOperation(id, {
       message: enabled ? "Enabling…" : "Disabling…",
@@ -230,19 +289,20 @@ export function Installed() {
       id,
       title: "Remove integration",
       description:
-        "It will be removed from configured clients and disappear from Installed if the operation completes.",
+        "Choose which clients should remove this integration.",
     });
+    await prepareRemovalClients(() => getClientTargets(id));
   };
 
-  const removeIntegration = async (id: string) => {
+  const removeIntegration = async (id: string, clientIds: string[]) => {
     setOperation(id, {
       message: "Removing…",
-      detail: "Removing MCP configuration from enabled clients",
+      detail: "Removing MCP configuration from selected clients",
     });
     setRowResult(id, null);
-    showRemovalStarted("Uninstalling the integration from configured clients.");
+    showRemovalStarted("Uninstalling the integration from selected clients.");
     try {
-      const result = await uninstallIntegration(id);
+      const result = await uninstallIntegrationFromClients(id, clientIds);
       await load(false);
       setRowResult(id, {
         success: result.success,
@@ -275,6 +335,8 @@ export function Installed() {
         ? `'${server.server_id}' will be removed from ${server.client_name}.`
         : `'${server.server_id}' was not installed by Taro. It will still be removed from ${server.client_name}.`,
     });
+    setRemovalClients([{ client_id: server.client_id, enabled: true }]);
+    setSelectedRemovalClients([server.client_id]);
   };
 
   const forceRemoveServer = async (server: ExistingServer) => {
@@ -358,19 +420,20 @@ export function Installed() {
       id,
       title: "Remove plugin",
       description:
-        "It will be uninstalled from configured clients and disappear from Installed if the operation completes.",
+        "Choose which clients should uninstall this plugin.",
     });
+    await prepareRemovalClients(() => getPluginClientTargets(id));
   };
 
-  const removePlugin = async (id: string) => {
+  const removePlugin = async (id: string, clientIds: string[]) => {
     setOperation(id, {
       message: "Removing…",
-      detail: "Uninstalling plugin from enabled clients",
+      detail: "Uninstalling plugin from selected clients",
     });
     setRowResult(id, null);
-    showRemovalStarted("Uninstalling the plugin from configured clients.");
+    showRemovalStarted("Uninstalling the plugin from selected clients.");
     try {
-      const result = await uninstallPlugin(id);
+      const result = await uninstallPluginFromClients(id, clientIds);
       await load(false);
       setRowResult(id, {
         success: result.success,
@@ -397,13 +460,14 @@ export function Installed() {
   const confirmPendingRemoval = async () => {
     const removal = pendingRemoval;
     if (!removal) return;
-    setPendingRemoval(null);
+    const clientIds = selectedRemovalClients;
+    resetPendingRemoval();
     if (removal.kind === "integration") {
-      await removeIntegration(removal.id);
+      await removeIntegration(removal.id, clientIds);
     } else if (removal.kind === "server") {
       await forceRemoveServer(removal.server);
     } else {
-      await removePlugin(removal.id);
+      await removePlugin(removal.id, clientIds);
     }
   };
 
@@ -441,7 +505,7 @@ export function Installed() {
       );
 
     return (
-      <div className="fixed right-5 top-5 z-50 w-[min(360px,calc(100vw-2.5rem))] rounded-lg border border-border bg-background p-4 shadow-lg">
+      <div className="animate-removal-toast-in fixed right-5 bottom-5 z-50 w-[min(360px,calc(100vw-2.5rem))] rounded-lg border border-border bg-background p-4 shadow-lg">
         <div className="flex items-start gap-3">
           {icon}
           <div className="min-w-0 flex-1">
@@ -488,24 +552,61 @@ export function Installed() {
       {removalNotification && renderRemovalNotification(removalNotification)}
       <Dialog
         open={pendingRemoval !== null}
-        onOpenChange={(open) => !open && setPendingRemoval(null)}
+        onOpenChange={(open) => !open && resetPendingRemoval()}
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{pendingRemoval?.title}</DialogTitle>
             <DialogDescription>{pendingRemoval?.description}</DialogDescription>
           </DialogHeader>
+          <div className="space-y-2">
+            {removalTargetsLoading ? (
+              <OperationStatus
+                message="Loading clients…"
+                detail="Finding where this is installed"
+              />
+            ) : removalClients.length > 0 ? (
+              removalClients.map((client) => {
+                const checkboxId = `remove-${pendingRemoval?.kind}-${client.client_id}`;
+                return (
+                  <label
+                    key={client.client_id}
+                    htmlFor={checkboxId}
+                    className="flex items-center gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                  >
+                    <Checkbox
+                      id={checkboxId}
+                      checked={selectedRemovalClients.includes(client.client_id)}
+                      onCheckedChange={(checked) =>
+                        toggleRemovalClient(client.client_id, checked === true)
+                      }
+                    />
+                    <span className="min-w-0 flex-1">
+                      {getClientLabel(client.client_id)}
+                    </span>
+                  </label>
+                );
+              })
+            ) : (
+              <p className="rounded-md border border-border px-3 py-2 text-sm text-muted-foreground">
+                There are no active clients to remove from.
+              </p>
+            )}
+          </div>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => setPendingRemoval(null)}
+              onClick={resetPendingRemoval}
             >
               Cancel
             </Button>
             <Button
               type="button"
               variant="destructive"
+              disabled={
+                removalTargetsLoading || selectedRemovalClients.length === 0
+              }
               onClick={() => void confirmPendingRemoval()}
             >
               Remove

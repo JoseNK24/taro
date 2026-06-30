@@ -182,6 +182,27 @@ impl<'a> PluginInstallEngine<'a> {
     }
 
     pub fn uninstall(&self, installation_id: &str) -> Result<UninstallResult, String> {
+        let targets = self
+            .db
+            .list_plugin_client_targets(installation_id)
+            .map_err(|e| e.to_string())?;
+        let client_ids = targets
+            .iter()
+            .filter(|t| t.enabled)
+            .map(|t| t.client_id.clone())
+            .collect();
+        self.uninstall_from_clients(installation_id, client_ids)
+    }
+
+    pub fn uninstall_from_clients(
+        &self,
+        installation_id: &str,
+        client_ids: Vec<String>,
+    ) -> Result<UninstallResult, String> {
+        if client_ids.is_empty() {
+            return Err("Select at least one client".to_string());
+        }
+
         let installation = self
             .db
             .get_plugin_installation(installation_id)
@@ -192,30 +213,36 @@ impl<'a> PluginInstallEngine<'a> {
             .get(&installation.plugin_id)
             .ok_or_else(|| format!("Plugin no encontrado: {}", installation.plugin_id))?;
 
-        let targets = self
-            .db
-            .list_plugin_client_targets(installation_id)
-            .map_err(|e| e.to_string())?;
-
         let mut client_results = Vec::new();
-        for target in targets.iter().filter(|t| t.enabled) {
-            let Some(strategy) = strategy_for_client(entry, &target.client_id) else {
+        for client_id in &client_ids {
+            let Some(strategy) = strategy_for_client(entry, client_id) else {
                 client_results.push(ClientOperationResult {
-                    client_id: target.client_id.clone(),
+                    client_id: client_id.clone(),
                     success: false,
                     message: "No uninstall strategy is configured for this client".to_string(),
                 });
                 continue;
             };
 
-            match uninstall_plugin_for_client(entry, &target.client_id, strategy) {
-                Ok(()) => client_results.push(ClientOperationResult {
-                    client_id: target.client_id.clone(),
-                    success: true,
-                    message: "Plugin uninstalled".to_string(),
-                }),
+            match uninstall_plugin_for_client(entry, client_id, strategy) {
+                Ok(()) => {
+                    self.db
+                        .set_plugin_client_target(
+                            installation_id,
+                            client_id,
+                            false,
+                            "removed",
+                            None,
+                        )
+                        .map_err(|e| e.to_string())?;
+                    client_results.push(ClientOperationResult {
+                        client_id: client_id.clone(),
+                        success: true,
+                        message: "Plugin uninstalled".to_string(),
+                    });
+                }
                 Err(e) => client_results.push(ClientOperationResult {
-                    client_id: target.client_id.clone(),
+                    client_id: client_id.clone(),
                     success: false,
                     message: e.to_string(),
                 }),
@@ -239,13 +266,22 @@ impl<'a> PluginInstallEngine<'a> {
             });
         }
 
-        self.db
-            .delete_plugin_installation(installation_id)
-            .map_err(|e| e.to_string())?;
-        let message = if client_results.is_empty() {
-            "Plugin removed from Taro".to_string()
-        } else {
+        let remaining_targets = self
+            .db
+            .list_plugin_client_targets(installation_id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .filter(|t| t.enabled)
+            .collect::<Vec<_>>();
+        if remaining_targets.is_empty() {
+            self.db
+                .delete_plugin_installation(installation_id)
+                .map_err(|e| e.to_string())?;
+        }
+        let message = if remaining_targets.is_empty() {
             "Plugin uninstalled successfully".to_string()
+        } else {
+            "Plugin uninstalled from selected clients".to_string()
         };
         Ok(UninstallResult {
             success: true,

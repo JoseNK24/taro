@@ -95,8 +95,9 @@ fn server_for_uninstall(
             .unwrap_or_else(|| {
                 // No persisted meta: rebuild the id with the *same* helper used at
                 // install time so the name matches and removal actually hits it.
-                let discovered_id =
-                    integration_id.strip_prefix("community-").unwrap_or(integration_id);
+                let discovered_id = integration_id
+                    .strip_prefix("community-")
+                    .unwrap_or(integration_id);
                 crate::models::McpServer {
                     id: crate::community_install::community_server_id(discovered_id),
                     command: String::new(),
@@ -266,6 +267,27 @@ impl<'a> InstallEngine<'a> {
     }
 
     pub fn uninstall(&self, installation_id: &str) -> Result<UninstallResult, String> {
+        let targets = self
+            .db
+            .list_client_targets(installation_id)
+            .map_err(|e| e.to_string())?;
+        let client_ids = targets
+            .iter()
+            .filter(|t| t.enabled)
+            .map(|t| t.client_id.clone())
+            .collect();
+        self.uninstall_from_clients(installation_id, client_ids)
+    }
+
+    pub fn uninstall_from_clients(
+        &self,
+        installation_id: &str,
+        client_ids: Vec<String>,
+    ) -> Result<UninstallResult, String> {
+        if client_ids.is_empty() {
+            return Err("Select at least one client".to_string());
+        }
+
         let installation = self
             .db
             .get_installation(installation_id)
@@ -286,16 +308,6 @@ impl<'a> InstallEngine<'a> {
             .managed_servers_for_installation(installation_id)
             .map_err(|e| e.to_string())?;
 
-        let targets = self
-            .db
-            .list_client_targets(installation_id)
-            .map_err(|e| e.to_string())?;
-        let client_ids: Vec<String> = targets
-            .iter()
-            .filter(|t| t.enabled)
-            .map(|t| t.client_id.clone())
-            .collect();
-
         let mut client_results = Vec::new();
         for client_id in &client_ids {
             let server_id = managed
@@ -313,6 +325,9 @@ impl<'a> InstallEngine<'a> {
             if results.iter().all(|r| r.success) {
                 self.db
                     .unmark_managed_server(client_id, &server_id)
+                    .map_err(|e| e.to_string())?;
+                self.db
+                    .set_client_target(installation_id, client_id, false)
                     .map_err(|e| e.to_string())?;
             }
             client_results.append(&mut results);
@@ -335,18 +350,29 @@ impl<'a> InstallEngine<'a> {
             });
         }
 
-        self.db
-            .delete_installation(installation_id)
+        let remaining_targets = self
+            .db
+            .list_enabled_client_targets(installation_id)
             .map_err(|e| e.to_string())?;
+        if remaining_targets.is_empty() {
+            self.db
+                .delete_installation(installation_id)
+                .map_err(|e| e.to_string())?;
+        }
         let already_absent = client_results
             .iter()
             .any(|r| r.message.starts_with("Already absent"));
-        let message = if client_ids.is_empty() {
-            "Integration removed from Taro".to_string()
+        let message = if remaining_targets.is_empty() {
+            if already_absent {
+                "Integration removed and verified absent (some clients were already clean)"
+                    .to_string()
+            } else {
+                "Integration removed and verified absent from selected clients".to_string()
+            }
         } else if already_absent {
-            "Integration removed and verified absent (some clients were already clean)".to_string()
+            "Integration removed from selected clients (some were already clean)".to_string()
         } else {
-            "Integration removed and verified absent from all clients".to_string()
+            "Integration removed from selected clients".to_string()
         };
         Ok(UninstallResult {
             success: true,

@@ -55,6 +55,16 @@ export async function uninstallIntegration(
   return invoke("uninstall_integration", { installationId });
 }
 
+export async function uninstallIntegrationFromClients(
+  installationId: string,
+  clientIds: string[],
+): Promise<UninstallResult> {
+  return invoke("uninstall_integration_from_clients", {
+    installationId,
+    clientIds,
+  });
+}
+
 export async function scanMcpServers(): Promise<ExistingServer[]> {
   return invoke("scan_existing_mcp_servers");
 }
@@ -182,6 +192,13 @@ export async function uninstallPlugin(
   installationId: string,
 ): Promise<UninstallResult> {
   return invoke("uninstall_plugin", { installationId });
+}
+
+export async function uninstallPluginFromClients(
+  installationId: string,
+  clientIds: string[],
+): Promise<UninstallResult> {
+  return invoke("uninstall_plugin_from_clients", { installationId, clientIds });
 }
 
 export async function togglePluginInstallation(
