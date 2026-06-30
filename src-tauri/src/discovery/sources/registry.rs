@@ -7,6 +7,7 @@ use super::super::compute_popularity_score;
 use super::super::DiscoveryError;
 
 const REGISTRY_URL: &str = "https://registry.modelcontextprotocol.io/v0/servers";
+const MAX_REGISTRY_PAGES: u32 = 5;
 
 #[derive(Debug, Deserialize)]
 struct RegistryResponse {
@@ -50,8 +51,13 @@ pub async fn fetch_registry_servers(
 ) -> Result<Vec<DiscoveredMcpEntry>, DiscoveryError> {
     let mut entries = Vec::new();
     let mut cursor: Option<String> = None;
+    let mut page = 0u32;
 
     loop {
+        page += 1;
+        if page > MAX_REGISTRY_PAGES {
+            break;
+        }
         let url = match &cursor {
             Some(c) => format!("{REGISTRY_URL}?cursor={c}"),
             None => REGISTRY_URL.to_string(),

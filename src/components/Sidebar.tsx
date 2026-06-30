@@ -4,7 +4,6 @@ import type { NavSection } from "../types";
 
 const NAV_ITEMS: { id: NavSection; label: string }[] = [
   { id: "discover", label: "Discover" },
-  { id: "plugins", label: "Plugins" },
   { id: "installed", label: "Installed" },
   { id: "health", label: "Health" },
   { id: "settings", label: "Settings" },

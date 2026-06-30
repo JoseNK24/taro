@@ -2,13 +2,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ClientLogo } from "@/components/ClientLogo";
+import { ClientLogoStack } from "@/components/ClientLogoStack";
+import { GitHubLink } from "@/components/GitHubLink";
 import {
   CLIENT_LABELS,
   isSupportedClientId,
@@ -46,21 +48,19 @@ export function PluginCard({ entry, installed, onInstall }: PluginCardProps) {
   const clients = supportedClientIds(entry);
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle>{entry.name}</CardTitle>
-          {entry.github_stars > 0 && (
-            <span className="shrink-0 text-xs text-muted-foreground">
-              ★ {formatStars(entry.github_stars)}
-            </span>
-          )}
-        </div>
+        <CardTitle>{entry.name}</CardTitle>
+        {entry.github_url && (
+          <CardAction>
+            <GitHubLink url={entry.github_url} />
+          </CardAction>
+        )}
         <CardDescription className="line-clamp-2">
           {entry.description}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-1 flex-col gap-3">
         <div className="flex flex-wrap gap-1">
           {entry.tags.map((tag) => (
             <Badge key={tag} variant="secondary">
@@ -68,18 +68,16 @@ export function PluginCard({ entry, installed, onInstall }: PluginCardProps) {
             </Badge>
           ))}
         </div>
-        {clients.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {clients.map((id) => (
-              <Badge key={id} variant="outline" className="gap-1.5 pr-2.5 text-xs">
-                <ClientLogo clientId={id} className="size-3.5 rounded-sm" />
-                {CLIENT_LABELS[id]}
-              </Badge>
-            ))}
-          </div>
-        )}
+        <div className="mt-auto flex items-center justify-between gap-2">
+          {clients.length > 0 && <ClientLogoStack clientIds={clients} />}
+          {entry.github_stars > 0 && (
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+              ★ {formatStars(entry.github_stars)}
+            </span>
+          )}
+        </div>
       </CardContent>
-      <CardFooter className="border-t-0 bg-transparent">
+      <CardFooter className="mt-auto border-t-0 bg-transparent">
         {entry.coming_soon ? (
           <Badge variant="outline" className="w-full justify-center py-2">
             Coming soon

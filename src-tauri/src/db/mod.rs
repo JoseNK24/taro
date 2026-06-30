@@ -521,22 +521,23 @@ impl Database {
     pub fn upsert_discovered_mcps(&self, entries: &[DiscoveredMcpEntry]) -> DbResult<DiscoverySyncStats> {
         let mut added = 0i64;
         let mut updated = 0i64;
+        let tx = self.conn.unchecked_transaction()?;
         for entry in entries {
-            let exists: bool = self
-                .conn
+            let exists: bool = tx
                 .query_row(
                     "SELECT COUNT(*) > 0 FROM discovered_mcps WHERE id = ?1",
                     params![entry.id],
                     |row| row.get(0),
                 )
                 .unwrap_or(false);
-            self.upsert_discovered_mcp(entry)?;
+            upsert_discovered_mcp_on(&tx, entry)?;
             if exists {
                 updated += 1;
             } else {
                 added += 1;
             }
         }
+        tx.commit()?;
         Ok(DiscoverySyncStats {
             added,
             updated,
@@ -545,49 +546,7 @@ impl Database {
     }
 
     fn upsert_discovered_mcp(&self, entry: &DiscoveredMcpEntry) -> DbResult<()> {
-        let tags = serde_json::to_string(&entry.tags).map_err(|e| {
-            DbError::Sqlite(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
-        })?;
-        let sources = serde_json::to_string(&entry.sources).map_err(|e| {
-            DbError::Sqlite(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
-        })?;
-        self.conn.execute(
-            "INSERT INTO discovered_mcps (
-                id, name, description, tags, github_url, homepage_url, registry_url,
-                github_stars, github_forks, github_updated_at, discovered_at, sources,
-                popularity_score, install_hint
-             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
-             ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                description = excluded.description,
-                tags = excluded.tags,
-                github_url = excluded.github_url,
-                homepage_url = excluded.homepage_url,
-                registry_url = excluded.registry_url,
-                github_stars = excluded.github_stars,
-                github_forks = excluded.github_forks,
-                github_updated_at = excluded.github_updated_at,
-                sources = excluded.sources,
-                popularity_score = excluded.popularity_score,
-                install_hint = excluded.install_hint",
-            params![
-                entry.id,
-                entry.name,
-                entry.description,
-                tags,
-                entry.github_url,
-                entry.homepage_url,
-                entry.registry_url,
-                entry.github_stars,
-                entry.github_forks,
-                entry.github_updated_at,
-                entry.discovered_at,
-                sources,
-                entry.popularity_score,
-                entry.install_hint,
-            ],
-        )?;
-        Ok(())
+        upsert_discovered_mcp_on(&self.conn, entry)
     }
 
     pub fn get_discovered_mcp(&self, id: &str) -> DbResult<Option<DiscoveredMcpEntry>> {
@@ -1004,6 +963,55 @@ impl Database {
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(DbError::from)
     }
+}
+
+fn upsert_discovered_mcp_on(
+    conn: &rusqlite::Connection,
+    entry: &DiscoveredMcpEntry,
+) -> DbResult<()> {
+    let tags = serde_json::to_string(&entry.tags).map_err(|e| {
+        DbError::Sqlite(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+    })?;
+    let sources = serde_json::to_string(&entry.sources).map_err(|e| {
+        DbError::Sqlite(rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
+    })?;
+    conn.execute(
+        "INSERT INTO discovered_mcps (
+            id, name, description, tags, github_url, homepage_url, registry_url,
+            github_stars, github_forks, github_updated_at, discovered_at, sources,
+            popularity_score, install_hint
+         ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+         ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            tags = excluded.tags,
+            github_url = excluded.github_url,
+            homepage_url = excluded.homepage_url,
+            registry_url = excluded.registry_url,
+            github_stars = excluded.github_stars,
+            github_forks = excluded.github_forks,
+            github_updated_at = excluded.github_updated_at,
+            sources = excluded.sources,
+            popularity_score = excluded.popularity_score,
+            install_hint = excluded.install_hint",
+        params![
+            entry.id,
+            entry.name,
+            entry.description,
+            tags,
+            entry.github_url,
+            entry.homepage_url,
+            entry.registry_url,
+            entry.github_stars,
+            entry.github_forks,
+            entry.github_updated_at,
+            entry.discovered_at,
+            sources,
+            entry.popularity_score,
+            entry.install_hint,
+        ],
+    )?;
+    Ok(())
 }
 
 fn row_to_discovered_mcp(row: &rusqlite::Row<'_>) -> Result<DiscoveredMcpEntry, rusqlite::Error> {

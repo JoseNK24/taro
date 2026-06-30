@@ -17,6 +17,7 @@ pub static SYNC_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 const SETTING_LAST_SYNCED: &str = "discovered_catalog_synced_at";
 const MAX_ENTRIES: usize = 2000;
+const UPSERT_BATCH_SIZE: usize = 100;
 
 #[derive(Debug, Error)]
 pub enum DiscoveryError {
@@ -119,11 +120,31 @@ async fn sync_discovered_catalog_inner(app: &AppHandle) -> DiscoveryResult<Disco
     });
     entries.truncate(MAX_ENTRIES);
 
-    let state = app.state::<crate::state::AppState>();
-    let db = state.db.lock().map_err(|e| DiscoveryError::Http(e.to_string()))?;
-    let stats = db.upsert_discovered_mcps(&entries)?;
-    db.set_setting(SETTING_LAST_SYNCED, &Utc::now().to_rfc3339())?;
-    Ok(stats)
+    let mut combined = DiscoverySyncStats {
+        added: 0,
+        updated: 0,
+        errors: 0,
+    };
+
+    for chunk in entries.chunks(UPSERT_BATCH_SIZE) {
+        let stats = {
+            let state = app.state::<crate::state::AppState>();
+            let db = state.db.lock().map_err(|e| DiscoveryError::Http(e.to_string()))?;
+            db.upsert_discovered_mcps(chunk)?
+        };
+        combined.added += stats.added;
+        combined.updated += stats.updated;
+        combined.errors += stats.errors;
+        tokio::task::yield_now().await;
+    }
+
+    {
+        let state = app.state::<crate::state::AppState>();
+        let db = state.db.lock().map_err(|e| DiscoveryError::Http(e.to_string()))?;
+        db.set_setting(SETTING_LAST_SYNCED, &Utc::now().to_rfc3339())?;
+    }
+
+    Ok(combined)
 }
 
 pub fn search_discovered_mcps(

@@ -23,6 +23,7 @@ struct GitHubRepo {
 }
 
 const GITHUB_SEARCH: &str = "https://api.github.com/search/repositories";
+const MAX_PAGES: u32 = 3;
 
 pub async fn fetch_github_repos(
     client: &reqwest::Client,
@@ -30,18 +31,15 @@ pub async fn fetch_github_repos(
 ) -> Result<Vec<DiscoveredMcpEntry>, DiscoveryError> {
     let mut entries = Vec::new();
     let queries = [
-        ("topic:mcp-server fork:false stars:>10", "stars"),
-        ("topic:model-context-protocol fork:false stars:>10", "stars"),
-        ("topic:mcp-server fork:false stars:>10", "updated"),
-        ("topic:model-context-protocol fork:false stars:>10", "updated"),
+        "topic:mcp-server fork:false stars:>10",
+        "topic:model-context-protocol fork:false stars:>10",
     ];
 
-    for (q, sort) in queries {
-        for page in 1..=10 {
+    for q in queries {
+        for page in 1..=MAX_PAGES {
             let url = format!(
-                "{GITHUB_SEARCH}?q={}&sort={}&order=desc&per_page=100&page={page}",
+                "{GITHUB_SEARCH}?q={}&sort=stars&order=desc&per_page=100&page={page}",
                 urlencoding::encode(q),
-                sort
             );
 
             let mut req = client.get(&url);

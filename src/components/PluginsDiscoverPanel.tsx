@@ -9,17 +9,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ErrorBanner,
-  LoadingState,
   OperationStatus,
-} from "../components/Feedback";
+} from "./Feedback";
 import { ClientName } from "@/components/ClientLogo";
 import {
   isStrategySupported,
   PluginCard,
-} from "../components/PluginCard";
-import { PageHeader } from "../components/Sidebar";
+} from "./PluginCard";
 import {
   detectClients,
   getPluginCatalog,
@@ -33,7 +32,8 @@ import {
 } from "@/lib/clients";
 import type { DetectionResult, PluginCatalogEntry } from "../types";
 
-interface PluginsDiscoverProps {
+interface PluginsDiscoverPanelProps {
+  active: boolean;
   onInstalled: () => void;
 }
 
@@ -50,11 +50,23 @@ function compatibleClients(
   });
 }
 
-export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
+function PluginGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-48 rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
+export function PluginsDiscoverPanel({ active, onInstalled }: PluginsDiscoverPanelProps) {
   const [catalog, setCatalog] = useState<PluginCatalogEntry[]>([]);
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [clients, setClients] = useState<DetectionResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<PluginCatalogEntry | null>(null);
@@ -65,18 +77,17 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
     Array<{ client_id: string; success: boolean; message: string }>
   >([]);
 
-  const load = useCallback(async () => {
+  const loadCatalog = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [cat, installs, detected] = await Promise.all([
+      const [cat, installs] = await Promise.all([
         getPluginCatalog(),
         getPluginInstallations(),
-        detectClients(),
       ]);
       setCatalog(cat);
       setInstalledIds(new Set(installs.map((i) => i.plugin_id)));
-      setClients(filterSupportedClients(detected));
+      setLoaded(true);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -84,13 +95,30 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loadClients = useCallback(async (): Promise<DetectionResult[]> => {
+    if (clientsLoaded) return clients;
+    try {
+      const detected = await detectClients();
+      const filtered = filterSupportedClients(detected);
+      setClients(filtered);
+      setClientsLoaded(true);
+      return filtered;
+    } catch (e) {
+      setError(String(e));
+      return [];
+    }
+  }, [clientsLoaded, clients]);
 
-  const openWizard = (entry: PluginCatalogEntry) => {
+  useEffect(() => {
+    if (active && !loaded && !loading) {
+      loadCatalog();
+    }
+  }, [active, loaded, loading, loadCatalog]);
+
+  const openWizard = async (entry: PluginCatalogEntry) => {
     if (entry.coming_soon) return;
-    const compatible = compatibleClients(entry, clients);
+    const loadedClients = await loadClients();
+    const compatible = compatibleClients(entry, loadedClients);
     setSelected(entry);
     setWizardStep("summary");
     setInstallMessage("");
@@ -100,7 +128,7 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
 
   const closeWizard = () => {
     setSelected(null);
-    load();
+    loadCatalog();
   };
 
   const wizardClients = selected ? compatibleClients(selected, clients) : [];
@@ -123,26 +151,26 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
     }
   };
 
-  if (loading) return <LoadingState />;
+  if (!active) return null;
 
   return (
     <div>
-      <PageHeader
-        title="Plugins"
-        description="Skills, rules and agent behavior for your AI assistants."
-      />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {catalog.map((entry) => (
-          <PluginCard
-            key={entry.id}
-            entry={entry}
-            installed={installedIds.has(entry.id)}
-            onInstall={openWizard}
-          />
-        ))}
-      </div>
+      {loading && !loaded ? (
+        <PluginGridSkeleton />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {catalog.map((entry) => (
+            <PluginCard
+              key={entry.id}
+              entry={entry}
+              installed={installedIds.has(entry.id)}
+              onInstall={() => void openWizard(entry)}
+            />
+          ))}
+        </div>
+      )}
 
       <Dialog
         open={selected !== null}

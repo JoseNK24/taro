@@ -4,7 +4,6 @@ import { Sidebar } from "./components/Sidebar";
 import { WindowDragRegion } from "./components/WindowDragRegion";
 import { FirstRunOnboarding } from "./components/FirstRunOnboarding";
 import { Discover } from "./views/Discover";
-import { PluginsDiscover } from "./views/PluginsDiscover";
 import { Installed } from "./views/Installed";
 import { Health } from "./views/Health";
 import { Settings } from "./views/Settings";
@@ -59,8 +58,6 @@ function App() {
             onOpenSettings={() => setSection("settings")}
           />
         );
-      case "plugins":
-        return <PluginsDiscover onInstalled={() => setSection("installed")} />;
       case "installed":
         return <Installed />;
       case "health":

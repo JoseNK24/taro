@@ -11,16 +11,19 @@ pub async fn fetch_all(github_token: Option<&str>) -> Result<Vec<DiscoveredMcpEn
         .build()
         .map_err(|e| DiscoveryError::Http(e.to_string()))?;
 
+    let (github_result, registry_result) = tokio::join!(
+        github::fetch_github_repos(&client, github_token),
+        registry::fetch_registry_servers(&client),
+    );
+
     let mut map: std::collections::HashMap<String, DiscoveredMcpEntry> =
         std::collections::HashMap::new();
 
-    let github_entries = github::fetch_github_repos(&client, github_token).await?;
-    for entry in github_entries {
+    for entry in registry_result? {
         merge_entry(&mut map, entry);
     }
 
-    let registry_entries = registry::fetch_registry_servers(&client).await?;
-    for entry in registry_entries {
+    for entry in github_result? {
         merge_entry(&mut map, entry);
     }
 

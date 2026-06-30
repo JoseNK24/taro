@@ -107,7 +107,6 @@ export type ClientTargetRecord = {
 
 export type NavSection =
   | "discover"
-  | "plugins"
   | "installed"
   | "health"
   | "settings";
