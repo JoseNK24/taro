@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ClientPicker } from "./install/ClientPicker";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,6 @@ import {
   ErrorBanner,
   OperationStatus,
 } from "./Feedback";
-import { ClientName } from "@/components/ClientLogo";
 import {
   isStrategySupported,
   PluginCard,
@@ -220,36 +219,12 @@ export function PluginsDiscoverPanel({ active, onInstalled }: PluginsDiscoverPan
                 wizardStep === "done") && (
                 <div>
                   {wizardStep === "clients" && (
-                    <div className="space-y-2">
-                      {wizardClients.length === 0 ? (
-                        <p className="text-sm text-amber-600 dark:text-amber-400">
-                          No compatible clients detected. Check the Clients
-                          section.
-                        </p>
-                      ) : (
-                        wizardClients.map((c) => (
-                          <label
-                            key={c.client_id}
-                            className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
-                          >
-                            <Checkbox
-                              checked={selectedClients.has(c.client_id)}
-                              onCheckedChange={(checked) => {
-                                const next = new Set(selectedClients);
-                                if (checked) next.add(c.client_id);
-                                else next.delete(c.client_id);
-                                setSelectedClients(next);
-                              }}
-                            />
-                            <ClientName
-                              clientId={c.client_id}
-                              name={c.display_name}
-                              className="text-sm"
-                            />
-                          </label>
-                        ))
-                      )}
-                    </div>
+                    <ClientPicker
+                      clients={wizardClients}
+                      selectedClients={selectedClients}
+                      onSelectionChange={setSelectedClients}
+                      emptyMessage="No compatible clients detected. Check Settings → Connections."
+                    />
                   )}
                   {wizardStep === "installing" && (
                     <OperationStatus

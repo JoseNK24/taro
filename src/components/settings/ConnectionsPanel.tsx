@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ErrorBanner } from "../Feedback";
 import {
   createHarnessInstance,
@@ -35,6 +43,7 @@ export function ConnectionsPanel() {
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -101,8 +110,10 @@ export function ConnectionsPanel() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Remove this harness connection?")) return;
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
     setBusyId(id);
     try {
       await deleteHarnessInstance(id);
@@ -156,7 +167,7 @@ export function ConnectionsPanel() {
                 busy={busyId === inst.id}
                 onToggleEnabled={(enabled) => handleToggle(inst.id, enabled, inst)}
                 onSetDefault={() => handleSetDefault(inst.id)}
-                onDelete={() => handleDelete(inst.id)}
+                onDelete={() => setPendingDeleteId(inst.id)}
               />
             ))}
           </div>
@@ -176,6 +187,38 @@ export function ConnectionsPanel() {
         onClose={() => setAddOpen(false)}
         onAdd={handleAdd}
       />
+
+      <Dialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteId(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove harness</DialogTitle>
+            <DialogDescription>
+              Remove this harness connection? Community MCP installs will no
+              longer use it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingDeleteId(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busyId !== null}
+              onClick={() => void confirmDelete()}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

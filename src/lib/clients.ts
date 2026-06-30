@@ -62,3 +62,20 @@ export function filterSupportedClients<T extends { client_id: string }>(clients:
     clients.filter((client) => isSupportedClientId(client.client_id)),
   );
 }
+
+export function syncLabel(client: {
+  detected: boolean;
+  sync_supported: boolean;
+}): string {
+  if (!client.detected) return "—";
+  if (client.sync_supported) return "Supported";
+  return "Coming soon";
+}
+
+export function configLabel(client: {
+  config_path?: string | null;
+  config_exists: boolean;
+}): string {
+  if (!client.config_path) return "—";
+  return client.config_exists ? "Found" : "No configuration";
+}

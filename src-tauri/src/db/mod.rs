@@ -2,9 +2,9 @@ use rusqlite::{params, Connection};
 use thiserror::Error;
 
 use crate::models::{
-    ClientTargetRecord, CommunityInstallMeta, DiscoveredMcpEntry, DiscoverySearchResult,
-    DiscoverySyncStats, HarnessInstanceRecord, HealthCheckRecord, InstallationRecord,
-    McpServer, PluginClientTargetRecord, PluginInstallationRecord,
+    ClientTargetRecord, CommunityInstallDetail, CommunityInstallMeta, DiscoveredMcpEntry,
+    DiscoverySearchResult, DiscoverySyncStats, HarnessInstanceRecord, HealthCheckRecord,
+    InstallationRecord, McpServer, PluginClientTargetRecord, PluginInstallationRecord,
 };
 
 #[derive(Debug, Error)]
@@ -276,6 +276,12 @@ impl Database {
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![key, value],
         )?;
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> DbResult<()> {
+        self.conn
+            .execute("DELETE FROM settings WHERE key = ?1", params![key])?;
         Ok(())
     }
 
@@ -941,6 +947,39 @@ impl Database {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn list_community_install_details(&self) -> DbResult<Vec<CommunityInstallDetail>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT cim.installation_id, cim.discovered_mcp_id, cim.harness_instance_id,
+                    cim.resolved_server_json, cim.env_keys_json, cim.agent_log, dm.name
+             FROM community_install_meta cim
+             JOIN installations i ON i.id = cim.installation_id
+             JOIN discovered_mcps dm ON dm.id = cim.discovered_mcp_id
+             WHERE i.source = 'community'",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let server_json: String = row.get(3)?;
+            let env_keys_json: String = row.get(4)?;
+            let resolved_server: McpServer = serde_json::from_str(&server_json).map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+            })?;
+            let env_keys: Vec<String> = serde_json::from_str(&env_keys_json).unwrap_or_default();
+            let installation_id: String = row.get(0)?;
+            Ok(CommunityInstallDetail {
+                installation_id: installation_id.clone(),
+                meta: CommunityInstallMeta {
+                    installation_id,
+                    discovered_mcp_id: row.get(1)?,
+                    harness_instance_id: row.get(2)?,
+                    resolved_server,
+                    env_keys,
+                    agent_log: row.get(5)?,
+                },
+                discovered_name: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn list_enabled_plugin_client_targets(

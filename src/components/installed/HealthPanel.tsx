@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "../components/StatusBadge";
-import { ErrorBanner, EmptyState, LoadingState } from "../components/Feedback";
-import { PageHeader } from "../components/Sidebar";
+import { StatusBadge } from "../StatusBadge";
+import { ErrorBanner, EmptyState, LoadingState } from "../Feedback";
 import {
   getHealthStatus,
   getInstallations,
   runAllHealthChecks,
   runHealthCheck,
-} from "../hooks/useTauri";
-import type { HealthCheckRecord, InstallationRecord } from "../types";
+} from "../../hooks/useTauri";
+import type { HealthCheckRecord, InstallationRecord } from "../../types";
 
-export function Health() {
+export function HealthPanel() {
   const [checks, setChecks] = useState<HealthCheckRecord[]>([]);
   const [installations, setInstallations] = useState<InstallationRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,19 +68,15 @@ export function Health() {
 
   return (
     <div>
-      <PageHeader
-        title="Health"
-        description="Connection status of your installed integrations."
-        action={
-          <Button
-            type="button"
-            disabled={checking || installations.length === 0}
-            onClick={handleCheckAll}
-          >
-            {checking ? "Checking…" : "Check all"}
-          </Button>
-        }
-      />
+      <div className="mb-4 flex items-center justify-end">
+        <Button
+          type="button"
+          disabled={checking || installations.length === 0}
+          onClick={handleCheckAll}
+        >
+          {checking ? "Checking…" : "Check all"}
+        </Button>
+      </div>
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       {installations.length === 0 ? (
@@ -117,7 +112,13 @@ export function Health() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge
-                        status={check?.ok ? "connected" : check ? "error" : "disabled"}
+                        status={
+                          check?.ok
+                            ? "connected"
+                            : check
+                              ? "error"
+                              : "disabled"
+                        }
                       />
                     </td>
                     <td className="px-4 py-3 text-foreground">

@@ -1,19 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ClientName } from "@/components/ClientLogo";
-import { filterSupportedClients } from "@/lib/clients";
+import { configLabel, filterSupportedClients, syncLabel } from "@/lib/clients";
 import type { DependencyStatus, DetectionResult } from "../../types";
-
-function syncLabel(client: DetectionResult): string {
-  if (!client.detected) return "—";
-  if (client.sync_supported) return "Supported";
-  return "Coming soon";
-}
-
-function configLabel(client: DetectionResult): string {
-  if (!client.config_path) return "—";
-  return client.config_exists ? "Found" : "No configuration";
-}
 
 interface McpClientsTableProps {
   clients: DetectionResult[];

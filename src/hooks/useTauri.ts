@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   ClientTargetRecord,
+  CommunityInstallDetail,
   CommunityInstallJob,
   CommunityInstallMeta,
   CommunityInstallProgressEvent,
@@ -49,12 +50,6 @@ export async function installIntegration(
   });
 }
 
-export async function uninstallIntegration(
-  installationId: string,
-): Promise<UninstallResult> {
-  return invoke("uninstall_integration", { installationId });
-}
-
 export async function uninstallIntegrationFromClients(
   installationId: string,
   clientIds: string[],
@@ -81,18 +76,6 @@ export async function toggleInstallation(
   enabled: boolean,
 ): Promise<void> {
   return invoke("toggle_installation", { installationId, enabled });
-}
-
-export async function syncInstallation(installationId: string): Promise<void> {
-  return invoke("sync_installation", { installationId });
-}
-
-export async function setClientTarget(
-  installationId: string,
-  clientId: string,
-  enabled: boolean,
-): Promise<void> {
-  return invoke("set_client_target", { installationId, clientId, enabled });
 }
 
 export async function detectClients(): Promise<DetectionResult[]> {
@@ -186,12 +169,6 @@ export async function installPlugin(
   clientIds: string[],
 ): Promise<PluginInstallResult> {
   return invoke("install_plugin", { pluginId, clientIds });
-}
-
-export async function uninstallPlugin(
-  installationId: string,
-): Promise<UninstallResult> {
-  return invoke("uninstall_plugin", { installationId });
 }
 
 export async function uninstallPluginFromClients(
@@ -300,6 +277,12 @@ export async function getCommunityInstallMeta(
   return invoke("get_community_install_meta", { installationId });
 }
 
+export async function listCommunityInstallDetails(): Promise<
+  CommunityInstallDetail[]
+> {
+  return invoke("list_community_install_details");
+}
+
 export async function communityMissingDependencies(
   config: ResolvedMcpConfig,
 ): Promise<MissingDependency[]> {
@@ -308,6 +291,18 @@ export async function communityMissingDependencies(
 
 export async function installDependencies(names: string[]): Promise<string> {
   return invoke("install_dependencies_cmd", { names });
+}
+
+export async function getGithubToken(): Promise<string | null> {
+  return invoke("get_github_token");
+}
+
+export async function setGithubToken(value: string): Promise<void> {
+  return invoke("set_github_token", { value });
+}
+
+export async function removeGithubToken(): Promise<void> {
+  return invoke("remove_github_token");
 }
 
 export async function getSetting(key: string): Promise<string | null> {

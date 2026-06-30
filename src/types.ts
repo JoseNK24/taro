@@ -105,13 +105,9 @@ export type ClientTargetRecord = {
   enabled: boolean;
 };
 
-export type NavSection =
-  | "discover"
-  | "installed"
-  | "health"
-  | "settings";
+export type NavSection = "discover" | "installed" | "settings";
 
-export type SettingsSection = "general" | "appearance" | "connections" | "secrets";
+export type SettingsSection = "preferences" | "connections" | "secrets";
 
 export type DiscoveredMcpEntry = {
   id: string;
@@ -268,6 +264,12 @@ export type CommunityInstallMeta = {
   };
   env_keys: string[];
   agent_log?: string | null;
+};
+
+export type CommunityInstallDetail = {
+  installation_id: string;
+  meta: CommunityInstallMeta;
+  discovered_name: string;
 };
 
 export type CommunityInstallProgressEvent = {

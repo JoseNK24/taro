@@ -100,11 +100,7 @@ pub async fn run_sync(app: &AppHandle) -> DiscoveryResult<DiscoverySyncStats> {
 }
 
 async fn sync_discovered_catalog_inner(app: &AppHandle) -> DiscoveryResult<DiscoverySyncStats> {
-    let github_token = {
-        let state = app.state::<crate::state::AppState>();
-        let db = state.db.lock().map_err(|e| DiscoveryError::Http(e.to_string()))?;
-        db.get_setting("github_token")?.unwrap_or_default()
-    };
+    let github_token = crate::secrets::get_app_secret("github_token").unwrap_or_default();
 
     let token_opt = if github_token.is_empty() {
         None

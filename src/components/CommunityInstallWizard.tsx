@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ClientPicker } from "./install/ClientPicker";
+import { SecretFields } from "./install/SecretFields";
 import {
   Dialog,
   DialogContent,
@@ -375,48 +376,21 @@ export function CommunityInstallWizard({
                 </ul>
               </div>
             )}
-            {resolved.env_keys.map((key) => (
-              <div key={key} className="space-y-2">
-                <Label htmlFor={key}>{key}</Label>
-                <Input
-                  id={key}
-                  type="password"
-                  value={secretValues[key] ?? ""}
-                  onChange={(e) =>
-                    setSecretValues((prev) => ({ ...prev, [key]: e.target.value }))
-                  }
-                />
-              </div>
-            ))}
-            <div className="space-y-2">
-              {clients.length === 0 ? (
-                <p className="text-sm text-amber-600 dark:text-amber-400">
-                  No sync-capable clients detected. Check Settings → Connections.
-                </p>
-              ) : (
-                clients.map((c) => (
-                  <label
-                    key={c.client_id}
-                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
-                  >
-                    <Checkbox
-                      checked={selectedClients.has(c.client_id)}
-                      onCheckedChange={(checked) => {
-                        const next = new Set(selectedClients);
-                        if (checked) next.add(c.client_id);
-                        else next.delete(c.client_id);
-                        setSelectedClients(next);
-                      }}
-                    />
-                    <ClientName
-                      clientId={c.client_id}
-                      name={c.display_name}
-                      className="text-sm"
-                    />
-                  </label>
-                ))
-              )}
-            </div>
+            {resolved.env_keys.length > 0 && (
+              <SecretFields
+                fields={resolved.env_keys.map((key) => ({
+                  key,
+                  label: key,
+                }))}
+                values={secretValues}
+                onChange={setSecretValues}
+              />
+            )}
+            <ClientPicker
+              clients={clients}
+              selectedClients={selectedClients}
+              onSelectionChange={setSelectedClients}
+            />
           </div>
         )}
 

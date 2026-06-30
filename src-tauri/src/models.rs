@@ -135,6 +135,13 @@ pub struct CommunityInstallMeta {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommunityInstallDetail {
+    pub installation_id: String,
+    pub meta: CommunityInstallMeta,
+    pub discovered_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunityInstallJob {
     pub id: String,
     pub discovered_mcp_id: String,

@@ -12,7 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorBanner, EmptyState, LoadingState } from "../components/Feedback";
-import { PageHeader } from "../components/Sidebar";
+import { PageHeader } from "../components/PageHeader";
 import {
   getSecretsStatus,
   removeSecret,
@@ -25,6 +25,7 @@ export function Secrets({ embedded = false }: { embedded?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<SecretStatus | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SecretStatus | null>(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -64,8 +65,10 @@ export function Secrets({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
-  const handleDelete = async (s: SecretStatus) => {
-    if (!confirm(`Remove the secret for ${s.integration_name}?`)) return;
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const s = pendingDelete;
+    setPendingDelete(null);
     setBusy(true);
     try {
       await removeSecret(s.integration_id, s.secret_key);
@@ -80,7 +83,7 @@ export function Secrets({ embedded = false }: { embedded?: boolean }) {
   if (loading) return <LoadingState />;
 
   return (
-    <div>
+    <div className={embedded ? "max-w-3xl" : undefined}>
       {!embedded && (
         <PageHeader
           title="Secrets"
@@ -138,7 +141,7 @@ export function Secrets({ embedded = false }: { embedded?: boolean }) {
                           variant="destructive"
                           size="sm"
                           disabled={busy}
-                          onClick={() => handleDelete(s)}
+                          onClick={() => setPendingDelete(s)}
                         >
                           Remove
                         </Button>
@@ -151,6 +154,35 @@ export function Secrets({ embedded = false }: { embedded?: boolean }) {
           ))}
         </div>
       )}
+
+      <Dialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          {pendingDelete && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Remove secret</DialogTitle>
+                <DialogDescription>
+                  Remove the secret for {pendingDelete.integration_name}? This
+                  cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setPendingDelete(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() => void confirmDelete()}
+                >
+                  Remove
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent className="sm:max-w-sm">

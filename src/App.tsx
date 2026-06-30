@@ -5,7 +5,6 @@ import { WindowDragRegion } from "./components/WindowDragRegion";
 import { FirstRunOnboarding } from "./components/FirstRunOnboarding";
 import { Discover } from "./views/Discover";
 import { Installed } from "./views/Installed";
-import { Health } from "./views/Health";
 import { Settings } from "./views/Settings";
 import { getFirstRunStatus } from "./hooks/useTauri";
 import type { NavSection } from "./types";
@@ -60,8 +59,6 @@ function App() {
         );
       case "installed":
         return <Installed />;
-      case "health":
-        return <Health />;
       case "settings":
         return <Settings />;
     }

@@ -9,7 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ClientPicker } from "../components/install/ClientPicker";
+import { SecretFields } from "../components/install/SecretFields";
 import {
   Dialog,
   DialogContent,
@@ -18,19 +19,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClientName } from "@/components/ClientLogo";
 import { DiscoveredMcpCard } from "../components/DiscoveredMcpCard";
+import { CommunityInstallWizard } from "../components/CommunityInstallWizard";
 import { DiscoverySearchBar } from "../components/DiscoverySearchBar";
 import {
   ErrorBanner,
+  EmptyState,
   LoadingButton,
   OperationStatus,
 } from "../components/Feedback";
 import { PluginsDiscoverPanel } from "../components/PluginsDiscoverPanel";
-import { PageHeader } from "../components/Sidebar";
+import { PageHeader } from "../components/PageHeader";
+import { SegmentedTabs } from "../components/SegmentedTabs";
 import {
   detectClients,
   getCatalog,
@@ -38,6 +39,8 @@ import {
   getInstallations,
   getSecretsStatus,
   installIntegration,
+  listHarnessInstances,
+  probeHarnesses,
   saveSecret,
   searchDiscoveredMcps,
   syncDiscoveredCatalog,
@@ -103,6 +106,28 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
   const [secretValues, setSecretValues] = useState<Record<string, string>>({});
   const [installMessage, setInstallMessage] = useState("");
 
+  const [canInstallCommunity, setCanInstallCommunity] = useState(false);
+  const [communityWizardEntry, setCommunityWizardEntry] =
+    useState<DiscoveredMcpEntry | null>(null);
+  const [harnessProbeKey, setHarnessProbeKey] = useState(0);
+
+  const probeCommunityHarnesses = useCallback(async () => {
+    try {
+      const [instances, snapshots] = await Promise.all([
+        listHarnessInstances(),
+        probeHarnesses(),
+      ]);
+      const capable = instances.some((inst) => {
+        if (!inst.enabled) return false;
+        const snap = snapshots.find((s) => s.instance_id === inst.id);
+        return snap?.agent_capable && snap.detected;
+      });
+      setCanInstallCommunity(capable);
+    } catch {
+      setCanInstallCommunity(false);
+    }
+  }, []);
+
   const loadCatalog = useCallback(async () => {
     setCatalogLoading(true);
     setError(null);
@@ -155,6 +180,16 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
   useEffect(() => {
     loadCatalog();
   }, [loadCatalog]);
+
+  useEffect(() => {
+    if (productTab !== "mcp" || mcpTab !== "community") return;
+    probeCommunityHarnesses();
+  }, [productTab, mcpTab, harnessProbeKey, probeCommunityHarnesses]);
+
+  const handleOpenSettings = () => {
+    setHarnessProbeKey((k) => k + 1);
+    onOpenSettings?.();
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(communityQuery), 300);
@@ -265,45 +300,25 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
-      <div className="mb-6 flex w-fit gap-1 rounded-lg border border-border p-1">
-        <Button
-          type="button"
-          variant={productTab === "mcp" ? "default" : "ghost"}
-          size="sm"
-          onClick={() => setProductTab("mcp")}
-        >
-          MCPs
-        </Button>
-        <Button
-          type="button"
-          variant={productTab === "plugins" ? "default" : "ghost"}
-          size="sm"
-          onClick={() => setProductTab("plugins")}
-        >
-          Plugins
-        </Button>
-      </div>
+      <SegmentedTabs
+        value={productTab}
+        onChange={setProductTab}
+        items={[
+          { id: "mcp", label: "MCPs" },
+          { id: "plugins", label: "Plugins" },
+        ]}
+      />
 
       {productTab === "mcp" && (
         <>
-          <div className="mb-6 flex w-fit gap-1 rounded-lg border border-border p-1">
-            <Button
-              type="button"
-              variant={mcpTab === "curated" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setMcpTab("curated")}
-            >
-              Curated
-            </Button>
-            <Button
-              type="button"
-              variant={mcpTab === "community" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setMcpTab("community")}
-            >
-              Community
-            </Button>
-          </div>
+          <SegmentedTabs
+            value={mcpTab}
+            onChange={setMcpTab}
+            items={[
+              { id: "curated", label: "Curated" },
+              { id: "community", label: "Community" },
+            ]}
+          />
 
           {mcpTab === "curated" && (
             catalogLoading && !catalogLoaded ? (
@@ -387,14 +402,10 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
                   detail="Loading matching entries from the local discovery index."
                 />
               ) : communityResults.length === 0 ? (
-                <Card className="border-dashed py-8 text-center shadow-none">
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground">No results</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Try different keywords or refresh the index.
-                    </p>
-                  </CardContent>
-                </Card>
+                <EmptyState
+                  title="No results"
+                  description="Try different keywords or refresh the index."
+                />
               ) : (
                 <>
                   <p className="text-xs text-muted-foreground">
@@ -406,8 +417,8 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
                       <DiscoveredMcpCard
                         key={entry.id}
                         entry={entry}
-                        onOpenSettings={onOpenSettings}
-                        onInstalled={onInstalled}
+                        canInstall={canInstallCommunity}
+                        onInstallClick={setCommunityWizardEntry}
                       />
                     ))}
                   </div>
@@ -422,6 +433,22 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
         active={productTab === "plugins"}
         onInstalled={onInstalled}
       />
+
+      {communityWizardEntry && (
+        <CommunityInstallWizard
+          entry={communityWizardEntry}
+          open={communityWizardEntry !== null}
+          onClose={() => {
+            setCommunityWizardEntry(null);
+            setHarnessProbeKey((k) => k + 1);
+          }}
+          onInstalled={() => {
+            setCommunityWizardEntry(null);
+            onInstalled();
+          }}
+          onOpenSettings={handleOpenSettings}
+        />
+      )}
 
       <Dialog
         open={selected !== null}
@@ -455,63 +482,25 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
               ) : (
                 <>
                   {wizardStep === "secrets" && (
-                    <div className="space-y-4">
-                      {integrationSecrets.map((s) => (
-                        <div key={s.secret_key} className="space-y-2">
-                          <Label htmlFor={s.secret_key}>{s.label}</Label>
-                          {s.connected ? (
-                            <p className="text-sm text-emerald-600 dark:text-emerald-400">Connected</p>
-                          ) : (
-                            <Input
-                              id={s.secret_key}
-                              type="password"
-                              placeholder="Enter your API key"
-                              value={secretValues[s.secret_key] ?? ""}
-                              onChange={(e) =>
-                                setSecretValues((prev) => ({
-                                  ...prev,
-                                  [s.secret_key]: e.target.value,
-                                }))
-                              }
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <SecretFields
+                      fields={integrationSecrets.map((s) => ({
+                        key: s.secret_key,
+                        label: s.label,
+                        connected: s.connected,
+                      }))}
+                      values={secretValues}
+                      onChange={setSecretValues}
+                    />
                   )}
 
                   {(wizardStep === "clients" || wizardStep === "installing" || wizardStep === "done") && (
                     <div>
                       {wizardStep === "clients" && (
-                        <div className="space-y-2">
-                          {clients.length === 0 ? (
-                            <p className="text-sm text-amber-600 dark:text-amber-400">
-                              No sync-capable clients were detected. Check Settings → Connections.
-                            </p>
-                          ) : (
-                            clients.map((c) => (
-                              <label
-                                key={c.client_id}
-                                className="flex items-center gap-2 rounded-lg border border-border px-3 py-2"
-                              >
-                                <Checkbox
-                                  checked={selectedClients.has(c.client_id)}
-                                  onCheckedChange={(checked) => {
-                                    const next = new Set(selectedClients);
-                                    if (checked) next.add(c.client_id);
-                                    else next.delete(c.client_id);
-                                    setSelectedClients(next);
-                                  }}
-                                />
-                                <ClientName
-                                  clientId={c.client_id}
-                                  name={c.display_name}
-                                  className="text-sm"
-                                />
-                              </label>
-                            ))
-                          )}
-                        </div>
+                        <ClientPicker
+                          clients={clients}
+                          selectedClients={selectedClients}
+                          onSelectionChange={setSelectedClients}
+                        />
                       )}
                       {wizardStep === "installing" && (
                         <OperationStatus

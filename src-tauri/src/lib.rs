@@ -30,6 +30,15 @@ use discovery::{import_if_empty, maybe_background_sync};
 use plugin_catalog::PluginCatalog;
 use state::AppState;
 
+fn migrate_github_token_to_keychain(db: &Database) {
+    if let Ok(Some(token)) = db.get_setting("github_token") {
+        if !token.is_empty() && secrets::get_app_secret("github_token").is_err() {
+            let _ = secrets::set_app_secret("github_token", &token);
+            let _ = db.delete_setting("github_token");
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -53,6 +62,8 @@ pub fn run() {
                 .expect("failed to resolve app data dir");
             let db_path = data_dir.join("taro.db");
             let db = Database::open(&db_path).expect("failed to open database");
+
+            migrate_github_token_to_keychain(&db);
 
             let catalog = Catalog::load(app.handle())
                 .or_else(|_| Catalog::from_embedded())
@@ -121,6 +132,10 @@ pub fn run() {
             commands::community_missing_dependencies,
             commands::install_dependencies_cmd,
             commands::get_community_install_meta,
+            commands::list_community_install_details,
+            commands::get_github_token,
+            commands::set_github_token,
+            commands::remove_github_token,
             commands::get_setting,
             commands::set_setting,
         ])

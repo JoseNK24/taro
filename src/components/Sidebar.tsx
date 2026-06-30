@@ -1,11 +1,9 @@
-import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { NavSection } from "../types";
 
 const NAV_ITEMS: { id: NavSection; label: string }[] = [
   { id: "discover", label: "Discover" },
   { id: "installed", label: "Installed" },
-  { id: "health", label: "Health" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -44,25 +42,5 @@ export function Sidebar({ active, onNavigate }: SidebarProps) {
         ))}
       </nav>
     </aside>
-  );
-}
-
-interface PageHeaderProps {
-  title: string;
-  description?: string;
-  action?: ReactNode;
-}
-
-export function PageHeader({ title, description, action }: PageHeaderProps) {
-  return (
-    <div className="mb-6 flex items-start justify-between gap-4">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">{title}</h2>
-        {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-        )}
-      </div>
-      {action}
-    </div>
   );
 }

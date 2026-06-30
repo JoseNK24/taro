@@ -16,11 +16,12 @@ use crate::harness::{create_instance, list_driver_infos, probe_all_instances};
 use crate::health::{build_mcp_server, probe_server};
 use crate::install::InstallEngine;
 use crate::models::{
-    CommunityInstallJob, CommunityInstallMeta, DependencyStatus, DetectionResult,
-    DiscoveredMcpEntry, DiscoverySearchResult, DiscoveryStatus, DiscoverySyncStats,
-    ExistingServerInfo, FirstRunStatus, HarnessDriverInfo, HarnessInstanceRecord, HarnessSnapshot,
-    HealthCheckRecord, InstallResult, InstallationRecord, IntegrationCatalogEntry,
-    PluginCatalogEntry, PluginClientTargetRecord, PluginInstallResult, PluginInstallationRecord,
+    CommunityInstallDetail, CommunityInstallJob, CommunityInstallMeta, DependencyStatus,
+    DetectionResult, DiscoveredMcpEntry, DiscoverySearchResult, DiscoveryStatus,
+    DiscoverySyncStats, ExistingServerInfo, FirstRunStatus, HarnessDriverInfo,
+    HarnessInstanceRecord, HarnessSnapshot, HealthCheckRecord, InstallResult,
+    InstallationRecord, IntegrationCatalogEntry, PluginCatalogEntry,
+    PluginClientTargetRecord, PluginInstallResult, PluginInstallationRecord,
     ResolvedMcpConfig, SecretStatus, UninstallResult,
 };
 use crate::plugin_install::PluginInstallEngine;
@@ -613,6 +614,40 @@ pub fn get_community_install_meta(
 ) -> Result<Option<CommunityInstallMeta>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_community_install_meta(&installation_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn remove_github_token() -> Result<(), String> {
+    secrets::delete_app_secret("github_token").map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_github_token() -> Result<Option<String>, String> {
+    match secrets::get_app_secret("github_token") {
+        Ok(value) if !value.is_empty() => Ok(Some(value)),
+        Ok(_) => Ok(None),
+        Err(secrets::SecretError::NotFound(_)) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn set_github_token(value: String) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        secrets::delete_app_secret("github_token").map_err(|e| e.to_string())
+    } else {
+        secrets::set_app_secret("github_token", trimmed).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn list_community_install_details(
+    state: State<AppState>,
+) -> Result<Vec<CommunityInstallDetail>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.list_community_install_details()
         .map_err(|e| e.to_string())
 }
 

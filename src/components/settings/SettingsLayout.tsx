@@ -3,8 +3,7 @@ import { Button } from "@/components/ui/button";
 import type { SettingsSection } from "../../types";
 
 const SETTINGS_NAV: { id: SettingsSection; label: string }[] = [
-  { id: "general", label: "General" },
-  { id: "appearance", label: "Appearance" },
+  { id: "preferences", label: "Preferences" },
   { id: "connections", label: "Connections" },
   { id: "secrets", label: "Secrets" },
 ];

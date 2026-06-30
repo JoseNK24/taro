@@ -17,6 +17,30 @@ fn account_name(integration_id: &str, secret_key: &str) -> String {
     format!("{integration_id}:{secret_key}")
 }
 
+fn app_account_name(key: &str) -> String {
+    format!("app:{key}")
+}
+
+pub fn set_app_secret(key: &str, value: &str) -> SecretResult<()> {
+    let entry = Entry::new(SERVICE, &app_account_name(key))?;
+    entry.set_password(value)?;
+    Ok(())
+}
+
+pub fn get_app_secret(key: &str) -> SecretResult<String> {
+    let entry = Entry::new(SERVICE, &app_account_name(key))?;
+    entry.get_password().map_err(|e| match e {
+        keyring::Error::NoEntry => SecretError::NotFound(format!("app:{key}")),
+        other => SecretError::Keyring(other),
+    })
+}
+
+pub fn delete_app_secret(key: &str) -> SecretResult<()> {
+    let entry = Entry::new(SERVICE, &app_account_name(key))?;
+    entry.delete_credential()?;
+    Ok(())
+}
+
 pub fn set_secret(integration_id: &str, secret_key: &str, value: &str) -> SecretResult<()> {
     let entry = Entry::new(SERVICE, &account_name(integration_id, secret_key))?;
     entry.set_password(value)?;
