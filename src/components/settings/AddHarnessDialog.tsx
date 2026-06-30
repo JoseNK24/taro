@@ -96,7 +96,8 @@ export function AddHarnessDialog({
                     clientId=""
                     driverKind={driver.kind}
                     name={driver.display_name}
-                    className="font-medium text-foreground"
+                    className="gap-1.5 font-medium text-foreground"
+                    logoClassName="size-4"
                   />
                 </div>
                 <div className="text-xs text-muted-foreground">

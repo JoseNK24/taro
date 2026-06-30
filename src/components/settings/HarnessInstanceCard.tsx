@@ -31,7 +31,8 @@ export function HarnessInstanceCard({
               clientId=""
               driverKind={instance.driver_kind}
               name={instance.display_name}
-              className="font-medium text-foreground"
+              className="gap-1.5 font-medium text-foreground"
+              logoClassName="size-4"
             />
             <Badge variant="outline">{instance.driver_kind}</Badge>
             {instance.is_default_install_agent && (

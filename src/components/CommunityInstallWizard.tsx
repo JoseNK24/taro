@@ -283,7 +283,8 @@ export function CommunityInstallWizard({
                         clientId=""
                         driverKind={inst.driver_kind}
                         name={inst.display_name}
-                        className="text-sm font-medium"
+                        className="gap-1.5 text-sm font-medium text-foreground"
+                        logoClassName="size-4"
                       />
                       <div className="text-xs text-muted-foreground">
                         {snap?.version ? `v${snap.version} · ` : ""}
