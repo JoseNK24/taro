@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { open } from "@tauri-apps/plugin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { GitHubLink } from "./GitHubLink";
 import { CommunityInstallWizard } from "./CommunityInstallWizard";
 import {
   listHarnessInstances,
@@ -52,18 +53,19 @@ export function DiscoveredMcpCard({
     checkHarnesses();
   }, [checkHarnesses]);
 
-  const openUrl = async (url: string) => {
-    await open(url);
-  };
-
   return (
     <>
-      <Card>
+      <Card className="flex h-full flex-col">
         <CardHeader>
           <CardTitle>{entry.name}</CardTitle>
+          {entry.github_url && (
+            <CardAction>
+              <GitHubLink url={entry.github_url} />
+            </CardAction>
+          )}
           <CardDescription className="line-clamp-3">{entry.description}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {entry.github_stars > 0 && (
               <Badge
@@ -90,10 +92,10 @@ export function DiscoveredMcpCard({
             </p>
           )}
         </CardContent>
-        <CardFooter className="flex flex-wrap gap-2 border-t-0 bg-transparent">
+        <CardFooter className="mt-auto border-t-0 bg-transparent">
           <Button
             type="button"
-            size="sm"
+            className="w-full"
             disabled={!canInstall}
             title={
               canInstall
@@ -104,36 +106,6 @@ export function DiscoveredMcpCard({
           >
             Install with agent
           </Button>
-          {entry.github_url && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => openUrl(entry.github_url!)}
-            >
-              Open on GitHub
-            </Button>
-          )}
-          {entry.registry_url && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => openUrl(entry.registry_url!)}
-            >
-              View in Registry
-            </Button>
-          )}
-          {entry.homepage_url && !entry.github_url && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => openUrl(entry.homepage_url!)}
-            >
-              Open website
-            </Button>
-          )}
         </CardFooter>
       </Card>
 
