@@ -3,12 +3,12 @@ use uuid::Uuid;
 use crate::adapters::detect_all_clients;
 use crate::db::Database;
 use crate::models::{
-    PluginClientInstallResult, PluginInstallResult, PluginInstallStrategy,
+    ClientOperationResult, PluginClientInstallResult, PluginInstallResult, PluginInstallStrategy,
+    UninstallResult,
 };
 use crate::plugin_adapters::{
-    check_cli_for_client, check_plugin_dependencies, effective_strategy,
-    install_plugin_for_client, is_strategy_supported, strategy_for_client,
-    uninstall_plugin_for_client,
+    check_cli_for_client, check_plugin_dependencies, effective_strategy, install_plugin_for_client,
+    is_strategy_supported, strategy_for_client, uninstall_plugin_for_client,
 };
 use crate::plugin_catalog::PluginCatalog;
 
@@ -181,7 +181,7 @@ impl<'a> PluginInstallEngine<'a> {
         })
     }
 
-    pub fn uninstall(&self, installation_id: &str) -> Result<(), String> {
+    pub fn uninstall(&self, installation_id: &str) -> Result<UninstallResult, String> {
         let installation = self
             .db
             .get_plugin_installation(installation_id)
@@ -197,16 +197,61 @@ impl<'a> PluginInstallEngine<'a> {
             .list_plugin_client_targets(installation_id)
             .map_err(|e| e.to_string())?;
 
+        let mut client_results = Vec::new();
         for target in targets.iter().filter(|t| t.enabled) {
-            if let Some(strategy) = strategy_for_client(entry, &target.client_id) {
-                let _ = uninstall_plugin_for_client(entry, &target.client_id, strategy);
+            let Some(strategy) = strategy_for_client(entry, &target.client_id) else {
+                client_results.push(ClientOperationResult {
+                    client_id: target.client_id.clone(),
+                    success: false,
+                    message: "No uninstall strategy is configured for this client".to_string(),
+                });
+                continue;
+            };
+
+            match uninstall_plugin_for_client(entry, &target.client_id, strategy) {
+                Ok(()) => client_results.push(ClientOperationResult {
+                    client_id: target.client_id.clone(),
+                    success: true,
+                    message: "Plugin uninstalled".to_string(),
+                }),
+                Err(e) => client_results.push(ClientOperationResult {
+                    client_id: target.client_id.clone(),
+                    success: false,
+                    message: e.to_string(),
+                }),
             }
+        }
+
+        let failures: Vec<_> = client_results.iter().filter(|r| !r.success).collect();
+        if !failures.is_empty() {
+            let message = failures
+                .iter()
+                .map(|r| format!("{}: {}", r.client_id, r.message))
+                .collect::<Vec<_>>()
+                .join("; ");
+            self.db
+                .update_plugin_installation_status(installation_id, "error", Some(&message))
+                .map_err(|e| e.to_string())?;
+            return Ok(UninstallResult {
+                success: false,
+                message: format!("Could not uninstall plugin from all clients: {message}"),
+                client_results,
+            });
         }
 
         self.db
             .delete_plugin_installation(installation_id)
             .map_err(|e| e.to_string())?;
-        Ok(())
+        let message = if client_results.is_empty() {
+            "Plugin removed from Taro".to_string()
+        } else {
+            "Plugin uninstalled successfully".to_string()
+        };
+        Ok(UninstallResult {
+            success: true,
+            message,
+            client_results,
+        })
     }
 
     pub fn set_enabled(&self, installation_id: &str, enabled: bool) -> Result<(), String> {
@@ -250,5 +295,89 @@ impl<'a> PluginInstallEngine<'a> {
             .map_err(|e| e.to_string())?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{PluginCatalogEntry, PluginMarketplace};
+    use std::collections::HashMap;
+
+    fn test_db(name: &str) -> (Database, std::path::PathBuf) {
+        let path = std::env::temp_dir().join(format!("{name}-{}.db", Uuid::new_v4()));
+        (Database::open(&path).unwrap(), path)
+    }
+
+    fn plugin_entry(strategy: Option<PluginInstallStrategy>) -> PluginCatalogEntry {
+        let mut client_install = HashMap::new();
+        if let Some(strategy) = strategy {
+            client_install.insert("codex".to_string(), strategy);
+        }
+        PluginCatalogEntry {
+            id: "plugin-a".to_string(),
+            name: "Plugin A".to_string(),
+            description: "Test plugin".to_string(),
+            tags: vec![],
+            icon: "plug".to_string(),
+            coming_soon: false,
+            github_url: "https://example.com/plugin-a.git".to_string(),
+            github_stars: 0,
+            marketplace: PluginMarketplace {
+                source: "https://example.com".to_string(),
+                plugin_id: "plugin-a".to_string(),
+                marketplace_name: "test".to_string(),
+            },
+            client_install,
+        }
+    }
+
+    #[test]
+    fn plugin_uninstall_keeps_db_record_when_client_fails() {
+        let (db, path) = test_db("taro-plugin-uninstall-fails");
+        db.upsert_plugin_installation("installation-1", "plugin-a", true, "installed", None)
+            .unwrap();
+        db.set_plugin_client_target("installation-1", "codex", true, "installed", None)
+            .unwrap();
+        let catalog = PluginCatalog::from_entries(vec![plugin_entry(None)]);
+
+        let result = PluginInstallEngine {
+            db: &db,
+            catalog: &catalog,
+        }
+        .uninstall("installation-1")
+        .unwrap();
+
+        assert!(!result.success);
+        assert!(db.get_plugin_installation("installation-1").is_ok());
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn plugin_uninstall_deletes_db_record_when_all_clients_succeed() {
+        let (db, path) = test_db("taro-plugin-uninstall-succeeds");
+        let plugin_file = std::env::temp_dir().join(format!("taro-plugin-file-{}", Uuid::new_v4()));
+        std::fs::write(&plugin_file, "plugin").unwrap();
+        db.upsert_plugin_installation("installation-1", "plugin-a", true, "installed", None)
+            .unwrap();
+        db.set_plugin_client_target("installation-1", "codex", true, "installed", None)
+            .unwrap();
+        let catalog = PluginCatalog::from_entries(vec![plugin_entry(Some(
+            PluginInstallStrategy::RepoFiles {
+                files: vec![plugin_file.display().to_string()],
+            },
+        ))]);
+
+        let result = PluginInstallEngine {
+            db: &db,
+            catalog: &catalog,
+        }
+        .uninstall("installation-1")
+        .unwrap();
+
+        assert!(result.success);
+        assert!(db.get_plugin_installation("installation-1").is_err());
+        assert!(!plugin_file.exists());
+        let _ = std::fs::remove_file(path);
     }
 }

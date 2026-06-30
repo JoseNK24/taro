@@ -27,6 +27,7 @@ import type {
   PluginInstallationRecord,
   ResolvedMcpConfig,
   SecretStatus,
+  UninstallResult,
 } from "../types";
 
 export async function getCatalog(): Promise<IntegrationCatalogEntry[]> {
@@ -49,7 +50,7 @@ export async function installIntegration(
 
 export async function uninstallIntegration(
   installationId: string,
-): Promise<void> {
+): Promise<UninstallResult> {
   return invoke("uninstall_integration", { installationId });
 }
 
@@ -165,7 +166,9 @@ export async function installPlugin(
   return invoke("install_plugin", { pluginId, clientIds });
 }
 
-export async function uninstallPlugin(installationId: string): Promise<void> {
+export async function uninstallPlugin(
+  installationId: string,
+): Promise<UninstallResult> {
   return invoke("uninstall_plugin", { installationId });
 }
 

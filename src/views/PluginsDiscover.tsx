@@ -9,7 +9,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ErrorBanner, LoadingState } from "../components/Feedback";
+import {
+  ErrorBanner,
+  LoadingState,
+  OperationStatus,
+} from "../components/Feedback";
 import { ClientName } from "@/components/ClientLogo";
 import {
   isStrategySupported,
@@ -220,9 +224,11 @@ export function PluginsDiscover({ onInstalled }: PluginsDiscoverProps) {
                     </div>
                   )}
                   {wizardStep === "installing" && (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      Installing plugin…
-                    </p>
+                    <OperationStatus
+                      className="py-6"
+                      message="Installing plugin…"
+                      detail="Installing plugin assets and syncing selected clients."
+                    />
                   )}
                   {wizardStep === "done" && (
                     <div className="space-y-3 py-2">

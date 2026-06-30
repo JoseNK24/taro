@@ -37,6 +37,11 @@ impl PluginCatalog {
         Ok(Self { entries })
     }
 
+    #[cfg(test)]
+    pub fn from_entries(entries: Vec<PluginCatalogEntry>) -> Self {
+        Self { entries }
+    }
+
     pub fn all(&self) -> &[PluginCatalogEntry] {
         &self.entries
     }

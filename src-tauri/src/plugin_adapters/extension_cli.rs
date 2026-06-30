@@ -34,8 +34,5 @@ pub fn install(package: &str) -> Result<(), String> {
 }
 
 pub fn uninstall(package: &str) -> Result<(), String> {
-    if !command_exists("gemini") {
-        return Ok(());
-    }
     run_gemini(&["extensions", "uninstall", package])
 }

@@ -1,24 +1,29 @@
 use tauri::State;
 
 use crate::catalog::Catalog;
-use crate::community_install::{confirm_community_install as run_confirm_install, validate_resolved_config};
-use crate::harness::{create_instance, list_driver_infos, probe_all_instances};
+use crate::community_install::{
+    confirm_community_install as run_confirm_install, validate_resolved_config,
+};
 use crate::db::Database;
 use crate::detect::{
     check_all_dependencies, detect_all_clients, first_run_status, scan_existing_servers,
 };
+use crate::discovery::{
+    get_discovered_mcp as discovery_get, get_discovery_status as discovery_status, run_sync,
+    search_discovered_mcps as discovery_search,
+};
+use crate::harness::{create_instance, list_driver_infos, probe_all_instances};
 use crate::health::{build_mcp_server, probe_server};
 use crate::install::InstallEngine;
 use crate::models::{
     CommunityInstallJob, CommunityInstallMeta, DependencyStatus, DetectionResult,
     DiscoveredMcpEntry, DiscoverySearchResult, DiscoveryStatus, DiscoverySyncStats,
-    ExistingServerInfo, FirstRunStatus, HarnessDriverInfo, HarnessInstanceRecord,
-    HarnessSnapshot, HealthCheckRecord, InstallResult, InstallationRecord,
-    IntegrationCatalogEntry, PluginCatalogEntry, PluginClientTargetRecord,
-    PluginInstallationRecord, PluginInstallResult, ResolvedMcpConfig, SecretStatus,
+    ExistingServerInfo, FirstRunStatus, HarnessDriverInfo, HarnessInstanceRecord, HarnessSnapshot,
+    HealthCheckRecord, InstallResult, InstallationRecord, IntegrationCatalogEntry,
+    PluginCatalogEntry, PluginClientTargetRecord, PluginInstallResult, PluginInstallationRecord,
+    ResolvedMcpConfig, SecretStatus, UninstallResult,
 };
 use crate::plugin_install::PluginInstallEngine;
-use crate::discovery::{get_discovered_mcp as discovery_get, get_discovery_status as discovery_status, run_sync, search_discovered_mcps as discovery_search};
 use crate::secrets::{self, delete_secret, set_secret};
 use crate::state::AppState;
 
@@ -62,7 +67,10 @@ pub fn install_integration(
 }
 
 #[tauri::command]
-pub fn uninstall_integration(state: State<AppState>, installation_id: String) -> Result<(), String> {
+pub fn uninstall_integration(
+    state: State<AppState>,
+    installation_id: String,
+) -> Result<UninstallResult, String> {
     with_db(&state, |db, catalog| {
         InstallEngine { db, catalog }.uninstall(&installation_id)
     })
@@ -94,11 +102,7 @@ pub fn set_client_target(
     enabled: bool,
 ) -> Result<(), String> {
     with_db(&state, |db, catalog| {
-        InstallEngine { db, catalog }.update_client_targets(
-            &installation_id,
-            &client_id,
-            enabled,
-        )
+        InstallEngine { db, catalog }.update_client_targets(&installation_id, &client_id, enabled)
     })
 }
 
@@ -170,7 +174,9 @@ pub fn run_health_check(
     installation_id: String,
 ) -> Result<HealthCheckRecord, String> {
     with_db(&state, |db, catalog| {
-        let installation = db.get_installation(&installation_id).map_err(|e| e.to_string())?;
+        let installation = db
+            .get_installation(&installation_id)
+            .map_err(|e| e.to_string())?;
 
         let server = if installation.source == "community" {
             let meta = db
@@ -339,15 +345,15 @@ pub fn get_discovered_mcp(
 }
 
 #[tauri::command]
-pub async fn sync_discovered_catalog(
-    app: tauri::AppHandle,
-) -> Result<DiscoverySyncStats, String> {
+pub async fn sync_discovered_catalog(app: tauri::AppHandle) -> Result<DiscoverySyncStats, String> {
     run_sync(&app).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn get_discovery_status(state: State<AppState>) -> Result<DiscoveryStatus, String> {
-    with_db(&state, |db, _| discovery_status(db).map_err(|e| e.to_string()))
+    with_db(&state, |db, _| {
+        discovery_status(db).map_err(|e| e.to_string())
+    })
 }
 
 #[tauri::command]
@@ -376,7 +382,10 @@ pub fn install_plugin(
 }
 
 #[tauri::command]
-pub fn uninstall_plugin(state: State<AppState>, installation_id: String) -> Result<(), String> {
+pub fn uninstall_plugin(
+    state: State<AppState>,
+    installation_id: String,
+) -> Result<UninstallResult, String> {
     with_plugin_db(&state, |db, catalog| {
         PluginInstallEngine { db, catalog }.uninstall(&installation_id)
     })
@@ -405,7 +414,9 @@ pub fn get_plugin_client_targets(
 }
 
 #[tauri::command]
-pub fn list_harness_instances(state: State<AppState>) -> Result<Vec<HarnessInstanceRecord>, String> {
+pub fn list_harness_instances(
+    state: State<AppState>,
+) -> Result<Vec<HarnessInstanceRecord>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.list_harness_instances().map_err(|e| e.to_string())
 }
