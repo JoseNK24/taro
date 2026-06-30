@@ -17,12 +17,12 @@ interface SidebarProps {
 
 export function Sidebar({ active, onNavigate }: SidebarProps) {
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-sidebar-border bg-sidebar/40 pt-10">
+    <aside className="flex w-52 shrink-0 flex-col border-r border-sidebar-border/70 bg-sidebar/55 pt-10 text-sidebar-foreground shadow-[inset_-1px_0_0_color-mix(in_oklch,var(--sidebar-foreground),transparent_94%)] backdrop-blur-2xl dark:border-sidebar-border/60 dark:bg-sidebar/45">
       <div className="px-5 pb-6">
         <h1 className="text-lg font-semibold tracking-tight text-sidebar-foreground">
           Taro
         </h1>
-        <p className="mt-0.5 text-xs text-muted-foreground">
+        <p className="mt-0.5 text-xs text-sidebar-foreground/60">
           MCP & Plugins
         </p>
       </div>
