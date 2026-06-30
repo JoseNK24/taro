@@ -49,7 +49,7 @@ pub trait ClientAdapter: Send + Sync {
     fn detect(&self) -> DetectionResult;
     fn read_servers(&self) -> AdapterResult<Vec<McpServer>>;
     fn write_server(&self, server: &McpServer) -> AdapterResult<()>;
-    fn remove_server(&self, server_id: &str) -> AdapterResult<()>;
+    fn remove_server(&self, server_id: &str) -> AdapterResult<bool>;
     fn backup_config(&self) -> AdapterResult<PathBuf>;
 
     fn is_app_installed(&self) -> bool {
@@ -95,9 +95,7 @@ pub fn all_adapters() -> Vec<Box<dyn ClientAdapter>> {
 }
 
 pub fn get_adapter(client_id: &str) -> Option<Box<dyn ClientAdapter>> {
-    all_adapters()
-        .into_iter()
-        .find(|a| a.id() == client_id)
+    all_adapters().into_iter().find(|a| a.id() == client_id)
 }
 
 pub fn detect_all_clients() -> Vec<DetectionResult> {
@@ -140,8 +138,8 @@ fn write_config(path: &Path, config: &ClientConfig) -> AdapterResult<()> {
         fs::create_dir_all(parent)?;
     }
     let content = serde_json::to_string_pretty(config)?;
-    let _: ClientConfig = serde_json::from_str(&content)
-        .map_err(|e| AdapterError::Validation(e.to_string()))?;
+    let _: ClientConfig =
+        serde_json::from_str(&content).map_err(|e| AdapterError::Validation(e.to_string()))?;
     fs::write(path, content)?;
     Ok(())
 }
@@ -203,13 +201,37 @@ pub(crate) fn write_server_to_path(path: &Path, server: &McpServer) -> AdapterRe
     Ok(())
 }
 
-pub(crate) fn remove_server_from_path(path: &Path, server_id: &str) -> AdapterResult<()> {
+pub(crate) fn remove_server_from_path(path: &Path, server_id: &str) -> AdapterResult<bool> {
     let backup = backup_file(path)?;
     let mut config = read_config(path)?;
-    config.mcp_servers.remove(server_id);
+    let removed = config.mcp_servers.remove(server_id).is_some();
     if let Err(e) = write_config(path, &config) {
         let _ = rollback_from_backup(path, &backup);
         return Err(e);
     }
-    Ok(())
+    Ok(removed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_server_from_path_reports_removed_or_absent() {
+        let dir =
+            std::env::temp_dir().join(format!("taro-remove-server-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mcp.json");
+        std::fs::write(
+            &path,
+            r#"{"mcpServers":{"taro-test":{"command":"node","args":["server.js"],"env":{}}}}"#,
+        )
+        .unwrap();
+
+        assert!(remove_server_from_path(&path, "taro-test").unwrap());
+        assert!(!remove_server_from_path(&path, "taro-test").unwrap());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

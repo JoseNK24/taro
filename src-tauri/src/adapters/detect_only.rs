@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::adapters::json_mcp::command_exists;
-use crate::adapters::{AdapterError, AdapterResult, ClientAdapter, expand_home_path};
+use crate::adapters::{expand_home_path, AdapterError, AdapterResult, ClientAdapter};
 use crate::models::{DetectionResult, McpServer};
 
 /// Adapter for clients we can detect but not sync to yet.
@@ -88,7 +88,7 @@ impl ClientAdapter for DetectOnlyAdapter {
         )))
     }
 
-    fn remove_server(&self, _server_id: &str) -> AdapterResult<()> {
+    fn remove_server(&self, _server_id: &str) -> AdapterResult<bool> {
         Err(AdapterError::Validation(format!(
             "{} does not support sync from Taro yet",
             self.display_name
@@ -96,9 +96,7 @@ impl ClientAdapter for DetectOnlyAdapter {
     }
 
     fn backup_config(&self) -> AdapterResult<PathBuf> {
-        Err(AdapterError::Validation(
-            "Sync not available".to_string(),
-        ))
+        Err(AdapterError::Validation("Sync not available".to_string()))
     }
 }
 
@@ -111,9 +109,7 @@ pub fn detect_from_spec(
     sync_supported: bool,
 ) -> DetectionResult {
     let app_exists = app_paths.iter().any(|p| p.exists());
-    let cli_exists = cli_commands
-        .iter()
-        .any(|cmd| command_exists(cmd));
+    let cli_exists = cli_commands.iter().any(|cmd| command_exists(cmd));
     DetectionResult {
         client_id: id.to_string(),
         display_name: display_name.to_string(),
@@ -152,7 +148,10 @@ mod tests {
         }
         let adapter = get_adapter("opencode").expect("opencode adapter registered");
         let result = adapter.detect();
-        assert!(result.detected, "OpenCode.app exists but adapter did not detect it");
+        assert!(
+            result.detected,
+            "OpenCode.app exists but adapter did not detect it"
+        );
         if dirs::home_dir()
             .map(|h| h.join(".config/opencode/opencode.jsonc").exists())
             .unwrap_or(false)

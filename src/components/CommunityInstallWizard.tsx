@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ErrorBanner } from "./Feedback";
+import { ErrorBanner, OperationStatus } from "./Feedback";
 import { ClientName } from "@/components/ClientLogo";
 import {
   cancelCommunityInstall,
@@ -306,7 +306,10 @@ export function CommunityInstallWizard({
 
         {step === "analyzing" && (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Analyzing with agent…</p>
+            <OperationStatus
+              message="Analyzing with agent…"
+              detail="Resolving the MCP command, args, dependencies and required environment."
+            />
             <pre className="max-h-48 overflow-auto rounded-lg bg-muted p-3 text-xs whitespace-pre-wrap">
               {agentLog || "Waiting for agent output…"}
             </pre>
@@ -417,9 +420,11 @@ export function CommunityInstallWizard({
         )}
 
         {step === "installing" && (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            {installStatus}
-          </p>
+          <OperationStatus
+            className="py-4"
+            message={installStatus}
+            detail="Writing client configs, storing secrets and checking the server."
+          />
         )}
 
         {step === "done" && (

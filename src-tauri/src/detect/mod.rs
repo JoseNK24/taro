@@ -1,7 +1,7 @@
-use crate::adapters::{get_adapter, all_adapters};
+use crate::adapters::{all_adapters, get_adapter};
 use crate::catalog::Catalog;
 use crate::models::{
-    DependencyStatus, ExistingServerInfo, FirstRunStatus, McpServer,
+    ClientOperationResult, DependencyStatus, ExistingServerInfo, FirstRunStatus, McpServer,
 };
 use crate::secrets;
 
@@ -101,14 +101,10 @@ pub fn build_server_for_integration(
 
     let missing = secrets::missing_required_secrets(integration_id, &entry.secrets);
     if !missing.is_empty() {
-        return Err(format!(
-            "Missing required secrets: {}",
-            missing.join(", ")
-        ));
+        return Err(format!("Missing required secrets: {}", missing.join(", ")));
     }
 
-    let env = secrets::resolve_env(integration_id, &entry.secrets)
-        .map_err(|e| e.to_string())?;
+    let env = secrets::resolve_env(integration_id, &entry.secrets).map_err(|e| e.to_string())?;
 
     let mut args = entry.server.args.clone();
     if integration_id == "filesystem" {
@@ -131,8 +127,8 @@ pub fn sync_to_clients(
     remove: bool,
 ) -> Result<(), String> {
     for client_id in client_ids {
-        let adapter = get_adapter(client_id)
-            .ok_or_else(|| format!("Cliente desconocido: {client_id}"))?;
+        let adapter =
+            get_adapter(client_id).ok_or_else(|| format!("Cliente desconocido: {client_id}"))?;
         if remove {
             adapter
                 .remove_server(&server.id)
@@ -142,6 +138,42 @@ pub fn sync_to_clients(
         }
     }
     Ok(())
+}
+
+pub fn remove_from_clients(
+    server: &McpServer,
+    client_ids: &[String],
+) -> Vec<ClientOperationResult> {
+    client_ids
+        .iter()
+        .map(|client_id| {
+            let Some(adapter) = get_adapter(client_id) else {
+                return ClientOperationResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message: format!("Cliente desconocido: {client_id}"),
+                };
+            };
+
+            match adapter.remove_server(&server.id) {
+                Ok(true) => ClientOperationResult {
+                    client_id: client_id.clone(),
+                    success: true,
+                    message: format!("Removed from {}", adapter.display_name()),
+                },
+                Ok(false) => ClientOperationResult {
+                    client_id: client_id.clone(),
+                    success: true,
+                    message: format!("Already absent from {}", adapter.display_name()),
+                },
+                Err(e) => ClientOperationResult {
+                    client_id: client_id.clone(),
+                    success: false,
+                    message: e.to_string(),
+                },
+            }
+        })
+        .collect()
 }
 
 pub fn sync_to_enabled_clients(

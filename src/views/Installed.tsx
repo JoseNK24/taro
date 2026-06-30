@@ -3,7 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "../components/StatusBadge";
-import { ErrorBanner, EmptyState, LoadingState } from "../components/Feedback";
+import {
+  ErrorBanner,
+  EmptyState,
+  LoadingButton,
+  LoadingState,
+  OperationStatus,
+} from "../components/Feedback";
 import { PageHeader } from "../components/Sidebar";
 import {
   getCatalog,
@@ -18,7 +24,9 @@ import {
   uninstallIntegration,
   uninstallPlugin,
 } from "../hooks/useTauri";
+import { getClientLabel } from "../lib/clients";
 import type {
+  ClientOperationResult,
   CommunityInstallMeta,
   InstallationRecord,
   IntegrationCatalogEntry,
@@ -27,6 +35,15 @@ import type {
 } from "../types";
 
 type InstalledTab = "mcp" | "plugins";
+type RowOperation = {
+  message: string;
+  detail?: string;
+};
+type RowResult = {
+  success: boolean;
+  message: string;
+  clientResults?: ClientOperationResult[];
+};
 
 export function Installed() {
   const [tab, setTab] = useState<InstalledTab>("mcp");
@@ -42,7 +59,9 @@ export function Installed() {
   const [communityNames, setCommunityNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [operations, setOperations] = useState<Record<string, RowOperation>>({});
+  const [results, setResults] = useState<Record<string, RowResult>>({});
+  const [notice, setNotice] = useState<RowResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,15 +115,42 @@ export function Installed() {
     pluginCatalog.map((c) => [c.id, c]),
   );
 
+  const setOperation = (id: string, operation: RowOperation | null) => {
+    setOperations((prev) => {
+      const next = { ...prev };
+      if (operation) next[id] = operation;
+      else delete next[id];
+      return next;
+    });
+  };
+
+  const setRowResult = (id: string, result: RowResult | null) => {
+    setResults((prev) => {
+      const next = { ...prev };
+      if (result) next[id] = result;
+      else delete next[id];
+      return next;
+    });
+  };
+
   const handleToggle = async (id: string, enabled: boolean) => {
-    setBusyId(id);
+    setOperation(id, {
+      message: enabled ? "Enabling…" : "Disabling…",
+      detail: "Syncing client configuration",
+    });
+    setRowResult(id, null);
+    setNotice(null);
     try {
       await toggleInstallation(id, enabled);
       await load();
+      setRowResult(id, {
+        success: true,
+        message: enabled ? "Integration enabled" : "Integration disabled",
+      });
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusyId(null);
+      setOperation(id, null);
     }
   };
 
@@ -116,38 +162,73 @@ export function Installed() {
     ) {
       return;
     }
-    setBusyId(id);
+    setOperation(id, {
+      message: "Removing…",
+      detail: "Removing MCP configuration from enabled clients",
+    });
+    setRowResult(id, null);
+    setNotice(null);
     try {
-      await uninstallIntegration(id);
+      const result = await uninstallIntegration(id);
       await load();
+      setRowResult(id, {
+        success: result.success,
+        message: result.message,
+        clientResults: result.client_results,
+      });
+      setNotice({
+        success: result.success,
+        message: result.message,
+        clientResults: result.client_results,
+      });
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusyId(null);
+      setOperation(id, null);
     }
   };
 
   const handleHealth = async (id: string) => {
-    setBusyId(id);
+    setOperation(id, {
+      message: "Checking…",
+      detail: "Running a health check against this MCP server",
+    });
+    setRowResult(id, null);
+    setNotice(null);
     try {
-      await runHealthCheck(id);
+      const result = await runHealthCheck(id);
       await load();
+      setRowResult(id, {
+        success: result.ok,
+        message: result.ok
+          ? "Health check passed"
+          : result.detail ?? "Health check failed",
+      });
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusyId(null);
+      setOperation(id, null);
     }
   };
 
   const handlePluginToggle = async (id: string, enabled: boolean) => {
-    setBusyId(id);
+    setOperation(id, {
+      message: enabled ? "Enabling…" : "Disabling…",
+      detail: "Syncing plugin state with enabled clients",
+    });
+    setRowResult(id, null);
+    setNotice(null);
     try {
       await togglePluginInstallation(id, enabled);
       await load();
+      setRowResult(id, {
+        success: true,
+        message: enabled ? "Plugin enabled" : "Plugin disabled",
+      });
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusyId(null);
+      setOperation(id, null);
     }
   };
 
@@ -159,18 +240,54 @@ export function Installed() {
     ) {
       return;
     }
-    setBusyId(id);
+    setOperation(id, {
+      message: "Removing…",
+      detail: "Uninstalling plugin from enabled clients",
+    });
+    setRowResult(id, null);
+    setNotice(null);
     try {
-      await uninstallPlugin(id);
+      const result = await uninstallPlugin(id);
       await load();
+      setRowResult(id, {
+        success: result.success,
+        message: result.message,
+        clientResults: result.client_results,
+      });
+      setNotice({
+        success: result.success,
+        message: result.message,
+        clientResults: result.client_results,
+      });
     } catch (e) {
       setError(String(e));
     } finally {
-      setBusyId(null);
+      setOperation(id, null);
     }
   };
 
   if (loading) return <LoadingState />;
+
+  const renderResult = (result: RowResult) => (
+    <div
+      className={
+        result.success
+          ? "mt-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400"
+          : "mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+      }
+    >
+      <p>{result.message}</p>
+      {result.clientResults && result.clientResults.length > 0 && (
+        <ul className="mt-1 space-y-0.5">
+          {result.clientResults.map((client) => (
+            <li key={client.client_id}>
+              {getClientLabel(client.client_id)}: {client.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -179,6 +296,11 @@ export function Installed() {
         description="Manage active integrations and plugins on your system."
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {notice && (
+        <div className="mb-4">
+          {renderResult(notice)}
+        </div>
+      )}
 
       <div className="mb-6 flex w-fit gap-1 rounded-lg border border-border p-1">
         <Button
@@ -212,6 +334,9 @@ export function Installed() {
                 const entry = catalogMap[inst.integration_id];
                 const isCommunity = inst.source === "community";
                 const meta = communityMeta[inst.id];
+                const operation = operations[inst.id];
+                const result = results[inst.id];
+                const busy = Boolean(operation);
                 const displayName = isCommunity
                   ? communityNames[inst.id] ??
                     inst.integration_id.replace("community-", "")
@@ -246,35 +371,49 @@ export function Installed() {
                             "en-US",
                           )}
                         </p>
+                        {operation && (
+                          <OperationStatus
+                            className="mt-3"
+                            message={operation.message}
+                            detail={operation.detail}
+                          />
+                        )}
+                        {result && renderResult(result)}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <Button
+                        <LoadingButton
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={busyId === inst.id}
+                          loading={operation?.message === "Enabling…" || operation?.message === "Disabling…"}
+                          loadingLabel={inst.enabled ? "Disabling…" : "Enabling…"}
+                          disabled={busy}
                           onClick={() => handleToggle(inst.id, !inst.enabled)}
                         >
                           {inst.enabled ? "Disable" : "Enable"}
-                        </Button>
-                        <Button
+                        </LoadingButton>
+                        <LoadingButton
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={busyId === inst.id}
+                          loading={operation?.message === "Checking…"}
+                          loadingLabel="Checking…"
+                          disabled={busy}
                           onClick={() => handleHealth(inst.id)}
                         >
                           Check
-                        </Button>
-                        <Button
+                        </LoadingButton>
+                        <LoadingButton
                           type="button"
                           variant="destructive"
                           size="sm"
-                          disabled={busyId === inst.id}
+                          loading={operation?.message === "Removing…"}
+                          loadingLabel="Removing…"
+                          disabled={busy}
                           onClick={() => handleRemove(inst.id)}
                         >
                           Remove
-                        </Button>
+                        </LoadingButton>
                       </div>
                     </CardContent>
                   </Card>
@@ -296,6 +435,9 @@ export function Installed() {
             <div className="space-y-3">
               {pluginInstallations.map((inst) => {
                 const entry = pluginCatalogMap[inst.plugin_id];
+                const operation = operations[inst.id];
+                const result = results[inst.id];
+                const busy = Boolean(operation);
                 return (
                   <Card key={inst.id}>
                     <CardContent className="flex items-center gap-4 py-4">
@@ -317,28 +459,40 @@ export function Installed() {
                             "en-US",
                           )}
                         </p>
+                        {operation && (
+                          <OperationStatus
+                            className="mt-3"
+                            message={operation.message}
+                            detail={operation.detail}
+                          />
+                        )}
+                        {result && renderResult(result)}
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <Button
+                        <LoadingButton
                           type="button"
                           variant="outline"
                           size="sm"
-                          disabled={busyId === inst.id}
+                          loading={operation?.message === "Enabling…" || operation?.message === "Disabling…"}
+                          loadingLabel={inst.enabled ? "Disabling…" : "Enabling…"}
+                          disabled={busy}
                           onClick={() =>
                             handlePluginToggle(inst.id, !inst.enabled)
                           }
                         >
                           {inst.enabled ? "Disable" : "Enable"}
-                        </Button>
-                        <Button
+                        </LoadingButton>
+                        <LoadingButton
                           type="button"
                           variant="destructive"
                           size="sm"
-                          disabled={busyId === inst.id}
+                          loading={operation?.message === "Removing…"}
+                          loadingLabel="Removing…"
+                          disabled={busy}
                           onClick={() => handlePluginRemove(inst.id)}
                         >
                           Remove
-                        </Button>
+                        </LoadingButton>
                       </div>
                     </CardContent>
                   </Card>

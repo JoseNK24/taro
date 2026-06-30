@@ -37,6 +37,11 @@ impl Catalog {
         Ok(Self { entries })
     }
 
+    #[cfg(test)]
+    pub fn from_entries(entries: Vec<IntegrationCatalogEntry>) -> Self {
+        Self { entries }
+    }
+
     pub fn all(&self) -> &[IntegrationCatalogEntry] {
         &self.entries
     }
@@ -51,7 +56,10 @@ impl Catalog {
 }
 
 fn resolve_catalog_path(app: &AppHandle) -> CatalogResult<PathBuf> {
-    if let Ok(path) = app.path().resolve("resources/catalog.json", tauri::path::BaseDirectory::Resource) {
+    if let Ok(path) = app.path().resolve(
+        "resources/catalog.json",
+        tauri::path::BaseDirectory::Resource,
+    ) {
         if path.exists() {
             return Ok(path);
         }

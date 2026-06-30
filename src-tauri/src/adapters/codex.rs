@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::json_mcp::command_exists;
 use crate::adapters::{
-    backup_file, expand_home_path, rollback_from_backup, AdapterError, AdapterResult,
-    ClientAdapter,
+    backup_file, expand_home_path, rollback_from_backup, AdapterError, AdapterResult, ClientAdapter,
 };
 use crate::models::{DetectionResult, McpServer};
 
@@ -53,8 +52,8 @@ impl CodexAdapter {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let content = toml::to_string_pretty(config)
-            .map_err(|e| AdapterError::Validation(e.to_string()))?;
+        let content =
+            toml::to_string_pretty(config).map_err(|e| AdapterError::Validation(e.to_string()))?;
         fs::write(&self.path, content)?;
         Ok(())
     }
@@ -117,15 +116,15 @@ impl ClientAdapter for CodexAdapter {
         Ok(())
     }
 
-    fn remove_server(&self, server_id: &str) -> AdapterResult<()> {
+    fn remove_server(&self, server_id: &str) -> AdapterResult<bool> {
         let backup = backup_file(&self.path)?;
         let mut config = self.read_config()?;
-        config.mcp_servers.remove(server_id);
+        let removed = config.mcp_servers.remove(server_id).is_some();
         if let Err(e) = self.write_config(&config) {
             let _ = rollback_from_backup(&self.path, &backup);
             return Err(e);
         }
-        Ok(())
+        Ok(removed)
     }
 
     fn backup_config(&self) -> AdapterResult<PathBuf> {

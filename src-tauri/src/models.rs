@@ -204,6 +204,20 @@ pub struct InstallResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClientOperationResult {
+    pub client_id: String,
+    pub success: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UninstallResult {
+    pub success: bool,
+    pub message: String,
+    pub client_results: Vec<ClientOperationResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveredMcpEntry {
     pub id: String,
     pub name: String,

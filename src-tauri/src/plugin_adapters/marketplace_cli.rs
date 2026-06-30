@@ -7,7 +7,9 @@ fn cli_command(client_id: &str) -> Result<&'static str, String> {
     match client_id {
         "claude-code" => Ok("claude"),
         "codex" => Ok("codex"),
-        _ => Err(format!("Cliente no soportado para marketplace CLI: {client_id}")),
+        _ => Err(format!(
+            "Cliente no soportado para marketplace CLI: {client_id}"
+        )),
     }
 }
 
@@ -40,37 +42,19 @@ fn run_cli(client_id: &str, args: &[&str]) -> Result<(), String> {
 
 pub fn install(entry: &PluginCatalogEntry, client_id: &str) -> Result<(), String> {
     let marketplace = &entry.marketplace;
-    let plugin_ref = format!(
-        "{}@{}",
-        marketplace.plugin_id, marketplace.marketplace_name
-    );
+    let plugin_ref = format!("{}@{}", marketplace.plugin_id, marketplace.marketplace_name);
 
     run_cli(
         client_id,
-        &[
-            "plugin",
-            "marketplace",
-            "add",
-            &marketplace.source,
-        ],
+        &["plugin", "marketplace", "add", &marketplace.source],
     )?;
 
-    run_cli(
-        client_id,
-        &["plugin", "install", &plugin_ref],
-    )
+    run_cli(client_id, &["plugin", "install", &plugin_ref])
 }
 
 pub fn uninstall(entry: &PluginCatalogEntry, client_id: &str) -> Result<(), String> {
     let marketplace = &entry.marketplace;
-    let plugin_ref = format!(
-        "{}@{}",
-        marketplace.plugin_id, marketplace.marketplace_name
-    );
-
-    if !command_exists(cli_command(client_id)?) {
-        return Ok(());
-    }
+    let plugin_ref = format!("{}@{}", marketplace.plugin_id, marketplace.marketplace_name);
 
     run_cli(client_id, &["plugin", "uninstall", &plugin_ref])
 }

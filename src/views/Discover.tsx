@@ -23,7 +23,12 @@ import { Label } from "@/components/ui/label";
 import { ClientName } from "@/components/ClientLogo";
 import { DiscoveredMcpCard } from "../components/DiscoveredMcpCard";
 import { DiscoverySearchBar } from "../components/DiscoverySearchBar";
-import { ErrorBanner, LoadingState } from "../components/Feedback";
+import {
+  ErrorBanner,
+  LoadingButton,
+  LoadingState,
+  OperationStatus,
+} from "../components/Feedback";
 import { PageHeader } from "../components/Sidebar";
 import {
   detectClients,
@@ -298,14 +303,15 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
               onSortChange={setCommunitySort}
             />
             <div className="flex shrink-0 flex-col items-end gap-1">
-              <Button
+              <LoadingButton
                 type="button"
                 variant="outline"
                 onClick={handleSync}
-                disabled={syncing}
+                loading={syncing}
+                loadingLabel="Updating…"
               >
-                {syncing ? "Updating…" : "Refresh index"}
-              </Button>
+                Refresh index
+              </LoadingButton>
               <span className="text-xs text-muted-foreground">
                 Last sync: {formatSyncTime(lastSyncedAt)}
               </span>
@@ -313,7 +319,11 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
           </div>
 
           {communityLoading ? (
-            <LoadingState />
+            <OperationStatus
+              className="py-8"
+              message="Searching community MCPs…"
+              detail="Loading matching entries from the local discovery index."
+            />
           ) : communityResults.length === 0 ? (
             <Card className="border-dashed py-8 text-center shadow-none">
               <CardContent>
@@ -426,9 +436,11 @@ export function Discover({ onInstalled, onOpenSettings }: DiscoverProps) {
                     </div>
                   )}
                   {wizardStep === "installing" && (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      Installing integration…
-                    </p>
+                    <OperationStatus
+                      className="py-6"
+                      message="Installing integration…"
+                      detail="Saving secrets and syncing the MCP configuration to selected clients."
+                    />
                   )}
                   {wizardStep === "done" && (
                     <p className="py-4 text-center text-sm text-emerald-700 dark:text-emerald-400">

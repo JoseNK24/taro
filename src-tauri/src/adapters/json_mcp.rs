@@ -66,7 +66,7 @@ impl ClientAdapter for JsonMcpAdapter {
         write_server_to_path(&self.config_path, server)
     }
 
-    fn remove_server(&self, server_id: &str) -> AdapterResult<()> {
+    fn remove_server(&self, server_id: &str) -> AdapterResult<bool> {
         remove_server_from_path(&self.config_path, server_id)
     }
 

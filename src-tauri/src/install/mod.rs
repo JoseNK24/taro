@@ -2,14 +2,46 @@ use uuid::Uuid;
 
 use crate::catalog::Catalog;
 use crate::db::Database;
-use crate::detect::{build_server_for_integration, check_dependencies, sync_to_clients};
+use crate::detect::{
+    build_server_for_integration, check_dependencies, remove_from_clients, sync_to_clients,
+};
 use crate::health::{build_mcp_server, probe_server};
-use crate::models::{InstallResult, McpServer};
+use crate::models::{InstallResult, McpServer, UninstallResult};
 use crate::secrets;
 
 pub struct InstallEngine<'a> {
     pub db: &'a Database,
     pub catalog: &'a Catalog,
+}
+
+fn server_for_uninstall(
+    db: &Database,
+    catalog: &Catalog,
+    installation_id: &str,
+    integration_id: &str,
+    source: &str,
+) -> Result<McpServer, String> {
+    if source == "community" {
+        return Ok(db
+            .get_community_install_meta(installation_id)
+            .map_err(|e| e.to_string())?
+            .map(|meta| meta.resolved_server)
+            .unwrap_or(crate::models::McpServer {
+                id: format!("taro-{integration_id}"),
+                command: String::new(),
+                args: vec![],
+                env: Default::default(),
+            }));
+    }
+
+    Ok(
+        build_server_for_integration(catalog, integration_id).unwrap_or(crate::models::McpServer {
+            id: format!("taro-{integration_id}"),
+            command: String::new(),
+            args: vec![],
+            env: Default::default(),
+        }),
+    )
 }
 
 pub fn install_resolved_server(
@@ -114,18 +146,13 @@ impl<'a> InstallEngine<'a> {
             return Err("Select at least one client".to_string());
         }
 
-        let env = secrets::resolve_env(integration_id, &entry.secrets)
-            .map_err(|e| e.to_string())?;
-        let probe_server_def = build_mcp_server(self.catalog, integration_id, env)
-            .map_err(|e| e.to_string())?;
+        let env =
+            secrets::resolve_env(integration_id, &entry.secrets).map_err(|e| e.to_string())?;
+        let probe_server_def =
+            build_mcp_server(self.catalog, integration_id, env).map_err(|e| e.to_string())?;
 
-        let result = install_resolved_server(
-            self.db,
-            &server,
-            integration_id,
-            "curated",
-            &client_ids,
-        )?;
+        let result =
+            install_resolved_server(self.db, &server, integration_id, "curated", &client_ids)?;
 
         let probe = probe_server(&probe_server_def);
 
@@ -145,19 +172,19 @@ impl<'a> InstallEngine<'a> {
         })
     }
 
-    pub fn uninstall(&self, installation_id: &str) -> Result<(), String> {
+    pub fn uninstall(&self, installation_id: &str) -> Result<UninstallResult, String> {
         let installation = self
             .db
             .get_installation(installation_id)
             .map_err(|e| e.to_string())?;
 
-        let server = build_server_for_integration(self.catalog, &installation.integration_id)
-            .unwrap_or(crate::models::McpServer {
-                id: format!("taro-{}", installation.integration_id),
-                command: String::new(),
-                args: vec![],
-                env: Default::default(),
-            });
+        let server = server_for_uninstall(
+            self.db,
+            self.catalog,
+            installation_id,
+            &installation.integration_id,
+            &installation.source,
+        )?;
 
         let targets = self
             .db
@@ -169,14 +196,43 @@ impl<'a> InstallEngine<'a> {
             .map(|t| t.client_id.clone())
             .collect();
 
-        if !client_ids.is_empty() {
-            sync_to_clients(&server, &client_ids, true)?;
+        let client_results = remove_from_clients(&server, &client_ids);
+        let failures: Vec<_> = client_results.iter().filter(|r| !r.success).collect();
+
+        if !failures.is_empty() {
+            let message = failures
+                .iter()
+                .map(|r| format!("{}: {}", r.client_id, r.message))
+                .collect::<Vec<_>>()
+                .join("; ");
+            self.db
+                .update_installation_status(installation_id, "error", Some(&message))
+                .map_err(|e| e.to_string())?;
+            return Ok(UninstallResult {
+                success: false,
+                message: format!("Could not remove integration from all clients: {message}"),
+                client_results,
+            });
         }
 
         self.db
             .delete_installation(installation_id)
             .map_err(|e| e.to_string())?;
-        Ok(())
+        let already_absent = client_results
+            .iter()
+            .any(|r| r.message.starts_with("Already absent"));
+        let message = if client_ids.is_empty() {
+            "Integration removed from Taro".to_string()
+        } else if already_absent {
+            "Integration removed; some clients were already clean".to_string()
+        } else {
+            "Integration removed successfully".to_string()
+        };
+        Ok(UninstallResult {
+            success: true,
+            message,
+            client_results,
+        })
     }
 
     pub fn set_enabled(&self, installation_id: &str, enabled: bool) -> Result<(), String> {
@@ -254,5 +310,54 @@ impl<'a> InstallEngine<'a> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::CommunityInstallMeta;
+
+    #[test]
+    fn community_uninstall_uses_saved_resolved_server_id() {
+        let path =
+            std::env::temp_dir().join(format!("taro-community-uninstall-{}.db", Uuid::new_v4()));
+        let db = Database::open(&path).unwrap();
+        db.upsert_installation_with_source(
+            "installation-1",
+            "community-example",
+            true,
+            "connected",
+            None,
+            "community",
+        )
+        .unwrap();
+        db.upsert_community_install_meta(&CommunityInstallMeta {
+            installation_id: "installation-1".to_string(),
+            discovered_mcp_id: "example".to_string(),
+            harness_instance_id: "harness-1".to_string(),
+            resolved_server: McpServer {
+                id: "taro-community-example".to_string(),
+                command: "node".to_string(),
+                args: vec!["server.js".to_string()],
+                env: Default::default(),
+            },
+            env_keys: vec![],
+            agent_log: None,
+        })
+        .unwrap();
+
+        let catalog = Catalog::from_entries(vec![]);
+        let server = server_for_uninstall(
+            &db,
+            &catalog,
+            "installation-1",
+            "community-example",
+            "community",
+        )
+        .unwrap();
+
+        assert_eq!(server.id, "taro-community-example");
+        let _ = std::fs::remove_file(path);
     }
 }

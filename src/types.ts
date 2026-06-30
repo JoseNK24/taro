@@ -84,6 +84,18 @@ export type InstallResult = {
   message: string;
 };
 
+export type ClientOperationResult = {
+  client_id: string;
+  success: boolean;
+  message: string;
+};
+
+export type UninstallResult = {
+  success: boolean;
+  message: string;
+  client_results: ClientOperationResult[];
+};
+
 export type ClientTargetRecord = {
   installation_id: string;
   client_id: string;
