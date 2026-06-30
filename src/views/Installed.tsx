@@ -3,6 +3,14 @@ import { CheckCircle2, Loader2, XCircle, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { StatusBadge } from "../components/StatusBadge";
 import {
   ErrorBanner,
@@ -54,6 +62,25 @@ type RemovalNotification = {
   message: string;
   clientResults?: ClientOperationResult[];
 };
+type PendingRemoval =
+  | {
+      kind: "integration";
+      id: string;
+      title: string;
+      description: string;
+    }
+  | {
+      kind: "server";
+      server: ExistingServer;
+      title: string;
+      description: string;
+    }
+  | {
+      kind: "plugin";
+      id: string;
+      title: string;
+      description: string;
+    };
 
 export function Installed() {
   const [tab, setTab] = useState<InstalledTab>("mcp");
@@ -74,6 +101,9 @@ export function Installed() {
   const [results, setResults] = useState<Record<string, RowResult>>({});
   const [removalNotification, setRemovalNotification] =
     useState<RemovalNotification | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<PendingRemoval | null>(
+    null,
+  );
 
   const load = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -195,13 +225,16 @@ export function Installed() {
   };
 
   const handleRemove = async (id: string) => {
-    if (
-      !confirm(
-        "Remove this integration? It will be removed from configured clients.",
-      )
-    ) {
-      return;
-    }
+    setPendingRemoval({
+      kind: "integration",
+      id,
+      title: "Eliminar integración",
+      description:
+        "Se eliminará de los clientes configurados y desaparecerá de Installed si la operación se completa.",
+    });
+  };
+
+  const removeIntegration = async (id: string) => {
     setOperation(id, {
       message: "Removing…",
       detail: "Removing MCP configuration from enabled clients",
@@ -236,13 +269,18 @@ export function Installed() {
   };
 
   const handleForceRemove = async (server: ExistingServer) => {
+    setPendingRemoval({
+      kind: "server",
+      server,
+      title: "Eliminar servidor MCP",
+      description: server.managed
+        ? `Se eliminará '${server.server_id}' de ${server.client_name}.`
+        : `'${server.server_id}' no fue instalado por Taro. Se eliminará de ${server.client_name} igualmente.`,
+    });
+  };
+
+  const forceRemoveServer = async (server: ExistingServer) => {
     const rowId = `${server.client_id}:${server.server_id}`;
-    const warning = server.managed
-      ? `Remove '${server.server_id}' from ${server.client_name}?`
-      : `'${server.server_id}' was not installed by Taro. Remove it from ${server.client_name} anyway?`;
-    if (!confirm(warning)) {
-      return;
-    }
     setOperation(rowId, {
       message: "Removing…",
       detail: `Removing ${server.server_id} from ${server.client_name}`,
@@ -319,13 +357,16 @@ export function Installed() {
   };
 
   const handlePluginRemove = async (id: string) => {
-    if (
-      !confirm(
-        "Remove this plugin? It will be uninstalled from configured clients.",
-      )
-    ) {
-      return;
-    }
+    setPendingRemoval({
+      kind: "plugin",
+      id,
+      title: "Eliminar plugin",
+      description:
+        "Se desinstalará de los clientes configurados y desaparecerá de Installed si la operación se completa.",
+    });
+  };
+
+  const removePlugin = async (id: string) => {
     setOperation(id, {
       message: "Removing…",
       detail: "Uninstalling plugin from enabled clients",
@@ -354,6 +395,19 @@ export function Installed() {
       });
     } finally {
       setOperation(id, null);
+    }
+  };
+
+  const confirmPendingRemoval = async () => {
+    const removal = pendingRemoval;
+    if (!removal) return;
+    setPendingRemoval(null);
+    if (removal.kind === "integration") {
+      await removeIntegration(removal.id);
+    } else if (removal.kind === "server") {
+      await forceRemoveServer(removal.server);
+    } else {
+      await removePlugin(removal.id);
     }
   };
 
@@ -436,6 +490,33 @@ export function Installed() {
       />
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {removalNotification && renderRemovalNotification(removalNotification)}
+      <Dialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => !open && setPendingRemoval(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{pendingRemoval?.title}</DialogTitle>
+            <DialogDescription>{pendingRemoval?.description}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingRemoval(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmPendingRemoval()}
+            >
+              Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="mb-6 flex w-fit gap-1 rounded-lg border border-border p-1">
         <Button
